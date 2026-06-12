@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/playbook-spec",
+    "crates/binding-spec",
+    "crates/plan-ir",
+    "crates/plan-compiler",
+    "crates/proof",
+    "crates/adapter-core",
+    "crates/adapter-sql",
+    "crates/adapter-soql",
+    "crates/adapter-csv",
+    "crates/runtime",
+    "reasoning-service",
+    "ag-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+thiserror = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres"] }
+axum = { version = "0.8", features = ["json"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+clap = { version = "4", features = ["derive"] }
+
+playbook-spec = { path = "crates/playbook-spec" }
+binding-spec = { path = "crates/binding-spec" }
+plan-ir = { path = "crates/plan-ir" }
+plan-compiler = { path = "crates/plan-compiler" }
+proof = { path = "crates/proof" }
+adapter-core = { path = "crates/adapter-core" }
+adapter-sql = { path = "crates/adapter-sql" }
+adapter-soql = { path = "crates/adapter-soql" }
+adapter-csv = { path = "crates/adapter-csv" }
+runtime = { path = "crates/runtime" }

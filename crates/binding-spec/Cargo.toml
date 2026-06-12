@@ -1,0 +1,12 @@
+[package]
+name = "binding-spec"
+description = "Declarative source bindings (SQL, SOQL) for playbook entities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+playbook-spec = { workspace = true }

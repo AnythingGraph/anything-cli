@@ -1,0 +1,27 @@
+adapter: sql
+playbook_id: crm-payroll-access
+source_id: warehouse_pg
+version: 1
+
+entities:
+  crm_user:
+    from: users
+    id_field: user_id
+    fields:
+      user_id: user_id
+      full_name: full_name
+
+  crm_account:
+    from: accounts
+    id_field: account_name
+    fields:
+      account_name: account_name
+      industry: industry
+
+relationships:
+  owns_account:
+    join:
+      from_entity: crm_user
+      to_entity: crm_account
+      on: "accounts.owner_user_id = users.user_id"
+    subject_link_column: owner_user_id

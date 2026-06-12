@@ -1,0 +1,4 @@
+payroll_id,user,full_name,pay_period,gross_pay,currency,pay_date
+PAY-001,alex.ae,Alex Anderson,2026-04,8500.00,USD,2026-04-30
+PAY-002,alex.ae,Alex Anderson,2026-03,8200.00,USD,2026-03-31
+PAY-003,jordan.ae,Jordan Ellis,2026-04,9100.00,USD,2026-04-30

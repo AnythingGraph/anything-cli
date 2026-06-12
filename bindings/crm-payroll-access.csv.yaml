@@ -1,0 +1,31 @@
+adapter: csv
+playbook_id: crm-payroll-access
+source_id: payroll_csv
+version: 1
+
+entities:
+  crm_user:
+    from: payroll.csv
+    id_field: user_id
+    fields:
+      user_id: user
+      full_name: full_name
+
+  crm_payroll_record:
+    from: payroll.csv
+    id_field: payroll_id
+    fields:
+      payroll_id: payroll_id
+      user_id: user
+      pay_period: pay_period
+      gross_pay: gross_pay
+      currency: currency
+      pay_date: pay_date
+
+relationships:
+  user_has_payroll:
+    join:
+      from_entity: crm_user
+      to_entity: crm_payroll_record
+      on: "payroll.user = user.user"
+    subject_link_column: user

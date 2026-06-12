@@ -1,0 +1,11 @@
+sources:
+  warehouse_pg:
+    adapter: sql
+    dsn: env:AG_SQL_DSN
+  salesforce_main:
+    adapter: soql
+    instance_url: env:AG_SF_INSTANCE_URL
+    auth: env:AG_SF_ACCESS_TOKEN
+  payroll_csv:
+    adapter: csv
+    file_path: env:AG_PAYROLL_CSV_PATH

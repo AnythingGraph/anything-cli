@@ -1,0 +1,21 @@
+[package]
+name = "runtime"
+description = "Thin reasoning runtime: load playbooks, bindings, execute plans"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+adapter-core = { workspace = true }
+adapter-sql = { workspace = true }
+adapter-soql = { workspace = true }
+adapter-csv = { workspace = true }
+binding-spec = { workspace = true }
+plan-compiler = { workspace = true }
+plan-ir = { workspace = true }
+playbook-spec = { workspace = true }
+proof = { workspace = true }

@@ -1,0 +1,11 @@
+[package]
+name = "proof"
+description = "Proof envelopes for governed query answers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+plan-ir = { workspace = true }

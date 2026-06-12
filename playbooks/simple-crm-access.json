@@ -1,0 +1,54 @@
+{
+  "id": "simple-crm-access",
+  "name": "Simple CRM access",
+  "description": "Minimal local playbook for ag-cli: sales reps and the accounts they own. Works with bindings/postgres.yaml (users + accounts tables).",
+  "category": "start_here",
+  "instructions": "1. Set AG_PLAYBOOKS_DIR to ag-cli/playbooks (default when running from ag-cli).\n2. Point AG_SQL_DSN at a Postgres database with users and accounts tables.\n3. Test with: ag test --playbook-id simple-crm-access --by-name \"Alex Anderson\" --relationship owns_account\n4. Add --execute to run the plan against Postgres.",
+  "entities": [
+    {
+      "name": "crm_user",
+      "display_name": "CRM user",
+      "fields": [
+        {
+          "field_name": "user_id",
+          "field_type": "TEXT",
+          "is_identifier": true
+        },
+        {
+          "field_name": "full_name",
+          "field_type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "crm_account",
+      "display_name": "Account",
+      "fields": [
+        {
+          "field_name": "account_name",
+          "field_type": "TEXT",
+          "is_identifier": true
+        },
+        {
+          "field_name": "industry",
+          "field_type": "TEXT"
+        }
+      ]
+    }
+  ],
+  "entity_relationships": [
+    {
+      "relationship_name": "owns_account",
+      "subject_entity_name": "crm_user",
+      "object_entity_name": "crm_account"
+    }
+  ],
+  "entity_sources": {
+    "crm_user": "postgres",
+    "crm_account": "postgres"
+  },
+  "bindings": {
+    "postgres": "simple-crm-access.postgres"
+  },
+  "default_binding": "simple-crm-access.postgres"
+}

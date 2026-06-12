@@ -1,0 +1,11 @@
+[package]
+name = "playbook-spec"
+description = "Load and validate AnythingGraph playbook JSON for the thin reasoning layer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

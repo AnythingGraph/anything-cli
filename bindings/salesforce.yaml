@@ -1,0 +1,31 @@
+adapter: soql
+source_id: salesforce_main
+version: 1
+
+entities:
+  crm_user:
+    from: User
+    id_field: Id
+    fields:
+      user_id: Id
+      full_name: Name
+    lookup:
+      by_name: "SELECT Id, Name FROM User WHERE Name = :name LIMIT 1"
+      by_identifier: "SELECT Id, Name FROM User WHERE Id = :identifier LIMIT 1"
+
+  crm_lead:
+    from: Lead
+    id_field: Id
+    fields:
+      lead_id: Id
+      lead_name: Name
+
+relationships:
+  assigned_to:
+    join:
+      from_entity: crm_user
+      to_entity: crm_lead
+      on: "Lead.OwnerId = User.Id"
+    operations:
+      count_for_subject: "SELECT COUNT() FROM Lead WHERE OwnerId = :subject_id"
+      list_for_subject: "SELECT Id, Name FROM Lead WHERE OwnerId = :subject_id LIMIT :limit"

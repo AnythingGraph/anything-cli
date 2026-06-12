@@ -1,0 +1,13 @@
+[package]
+name = "plan-compiler"
+description = "Compile playbook-scoped query requests into plan IR"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+playbook-spec = { workspace = true }
+plan-ir = { workspace = true }
