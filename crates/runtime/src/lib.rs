@@ -4,8 +4,13 @@ use std::sync::Arc;
 
 use adapter_core::{build_exec_context, AdapterRegistry, DataAdapter, ExecutionState};
 use adapter_csv::{introspect_csv_file, CsvAdapter};
-use adapter_soql::SoqlAdapter;
-use adapter_sql::{introspect_postgres_schema, SqlAdapter, SourceSchemaCatalog};
+use adapter_mongodb::{introspect_mongodb_schema, MongoDbAdapter};
+use adapter_rest::{introspect_rest_schema, RestAdapter};
+use adapter_soql::{introspect_salesforce_schema, SoqlAdapter};
+use adapter_sql::{
+    introspect_mssql_schema, introspect_mysql_schema, introspect_postgres_schema, MssqlAdapter,
+    MysqlAdapter, SqlAdapter, SourceSchemaCatalog,
+};
 use anyhow::{anyhow, Context, Result};
 use binding_spec::{
     compile_binding_queries, load_binding_from_path, load_binding_from_yaml, load_profile_from_path,
@@ -57,10 +62,22 @@ impl ReasoningRuntime {
             .register(Arc::new(SqlAdapter) as Arc<dyn DataAdapter>);
         runtime
             .adapters
+            .register(Arc::new(MysqlAdapter) as Arc<dyn DataAdapter>);
+        runtime
+            .adapters
+            .register(Arc::new(MssqlAdapter) as Arc<dyn DataAdapter>);
+        runtime
+            .adapters
             .register(Arc::new(SoqlAdapter::default()) as Arc<dyn DataAdapter>);
         runtime
             .adapters
             .register(Arc::new(CsvAdapter) as Arc<dyn DataAdapter>);
+        runtime
+            .adapters
+            .register(Arc::new(MongoDbAdapter) as Arc<dyn DataAdapter>);
+        runtime
+            .adapters
+            .register(Arc::new(RestAdapter) as Arc<dyn DataAdapter>);
 
         runtime.reload_catalog().await?;
         Ok(runtime)
@@ -379,7 +396,22 @@ impl ReasoningRuntime {
                     .map_err(|error| anyhow!("postgres introspection failed: {error}"))?;
                 Some(serde_json::to_value(catalog)?)
             }
-            "soql" => None,
+            "soql" => {
+                let instance_url = connection
+                    .instance_url
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing instance_url"))?;
+                let access_token = connection
+                    .auth
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing auth token"))?;
+                let catalog = introspect_salesforce_schema(instance_url, access_token, schema_name)
+                    .await
+                    .map_err(|error| anyhow!("salesforce introspection failed: {error}"))?;
+                Some(serde_json::to_value(catalog)?)
+            }
             "csv" => {
                 let file_path = connection
                     .file_path
@@ -390,6 +422,51 @@ impl ReasoningRuntime {
                     .map_err(|error| anyhow!("csv introspection failed: {error}"))?;
                 Some(serde_json::to_value(catalog)?)
             }
+            "mysql" => {
+                let dsn = connection
+                    .dsn
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing dsn"))?;
+                let catalog = introspect_mysql_schema(dsn, schema_name)
+                    .await
+                    .map_err(|error| anyhow!("mysql introspection failed: {error}"))?;
+                Some(serde_json::to_value(catalog)?)
+            }
+            "mssql" => {
+                let dsn = connection
+                    .dsn
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing dsn"))?;
+                let catalog = introspect_mssql_schema(dsn, schema_name)
+                    .await
+                    .map_err(|error| anyhow!("mssql introspection failed: {error}"))?;
+                Some(serde_json::to_value(catalog)?)
+            }
+            "mongodb" => {
+                let dsn = connection
+                    .dsn
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing dsn"))?;
+                let catalog = introspect_mongodb_schema(
+                    dsn,
+                    connection.database.as_deref().or(schema_name),
+                )
+                .await
+                .map_err(|error| anyhow!("mongodb introspection failed: {error}"))?;
+                Some(serde_json::to_value(catalog)?)
+            }
+            "rest" => {
+                let base_url = connection
+                    .base_url
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing base_url"))?;
+                let catalog = introspect_rest_schema(base_url, schema_name);
+                Some(serde_json::to_value(catalog)?)
+            }
             other => return Err(anyhow!("introspection not supported for adapter: {other}")),
         };
 
@@ -397,11 +474,7 @@ impl ReasoningRuntime {
             source_id: source_id.to_string(),
             adapter: connection.adapter.clone(),
             schema,
-            message: if connection.adapter == "soql" {
-                Some("Salesforce introspection is not implemented yet; use describe metadata from your org.".into())
-            } else {
-                None
-            },
+            message: None,
         })
     }
 
@@ -716,6 +789,11 @@ fn default_binding_name_for_playbook(
 
     let adapter_suffix = match binding.adapter.as_str() {
         "sql" => "postgres",
+        "soql" => "salesforce",
+        "mysql" => "mysql",
+        "mssql" => "mssql",
+        "mongodb" => "mongodb",
+        "rest" => "rest",
         other => other,
     };
     playbook_binding_stem(&playbook.id, adapter_suffix)
@@ -772,6 +850,12 @@ fn resolve_profile_env_refs(profile: &mut SourceProfile) {
         }
         if let Some(file_path) = source.file_path.as_ref() {
             source.file_path = Some(resolve_env_reference(file_path));
+        }
+        if let Some(base_url) = source.base_url.as_ref() {
+            source.base_url = Some(resolve_env_reference(base_url));
+        }
+        if let Some(database) = source.database.as_ref() {
+            source.database = Some(resolve_env_reference(database));
         }
     }
 }

@@ -10,6 +10,8 @@ members = [
     "crates/adapter-sql",
     "crates/adapter-soql",
     "crates/adapter-csv",
+    "crates/adapter-mongodb",
+    "crates/adapter-rest",
     "crates/runtime",
     "crates/rebac",
     "reasoning-service",
@@ -32,7 +34,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 async-trait = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql"] }
+mongodb = "3.2"
+urlencoding = "2"
+tiberius = { version = "0.12", default-features = false, features = ["tds73", "chrono", "rustls"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 axum = { version = "0.8", features = ["json"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 clap = { version = "4", features = ["derive"] }
@@ -46,5 +52,7 @@ adapter-core = { path = "crates/adapter-core" }
 adapter-sql = { path = "crates/adapter-sql" }
 adapter-soql = { path = "crates/adapter-soql" }
 adapter-csv = { path = "crates/adapter-csv" }
+adapter-mongodb = { path = "crates/adapter-mongodb" }
+adapter-rest = { path = "crates/adapter-rest" }
 runtime = { path = "crates/runtime" }
 rebac = { path = "crates/rebac" }

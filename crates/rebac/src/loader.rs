@@ -29,7 +29,7 @@ pub fn parse_relationship_access_rules(
     serde_json::from_value(raw_rules.clone())
 }
 
-/// Return enforced rules only when implementation_status is enforced.
+/// Return enforced rules only when `active` is true (or legacy implementation_status).
 pub fn enforced_rules(rules: &RelationshipAccessRules) -> Option<RelationshipAccessRules> {
     if rules.is_enforced() {
         Some(rules.clone())

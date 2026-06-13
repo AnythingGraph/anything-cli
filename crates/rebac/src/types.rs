@@ -16,14 +16,6 @@ pub enum RebacEffect {
     Deny,
 }
 
-/// Whether rules are enforced at runtime or catalog-only documentation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RebacImplementationStatus {
-    CatalogOnly,
-    Enforced,
-}
-
 /// One hop in a relationship-based access path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelationshipAccessPathStep {
@@ -100,19 +92,20 @@ pub struct RelationshipAccessRules {
     pub rules: Vec<RelationshipAccessRule>,
     #[serde(default)]
     pub deny_by_default: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub implementation_status: Option<RebacImplementationStatus>,
+    /// When true, rules are applied at query time (row-level ReBAC).
+    #[serde(default)]
+    pub active: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implementation_note: Option<String>,
+    /// Legacy OSS field; `"enforced"` is treated as active when `active` is false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation_status: Option<String>,
 }
 
 impl RelationshipAccessRules {
     /// True when playbook rules should be applied at runtime.
     pub fn is_enforced(&self) -> bool {
-        matches!(
-            self.implementation_status,
-            Some(RebacImplementationStatus::Enforced)
-        )
+        self.active || self.implementation_status.as_deref() == Some("enforced")
     }
 }
 

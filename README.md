@@ -8,6 +8,10 @@ No data lake. No ETL project. No copy-paste SQL into chat.
 
 ![Anything CLI](https://anythinggraph.com/anythinggraphcli.png)
 
+> **Demo names in this repo:** Playbooks like `crm-payroll-access`, entities like `crm_user`, relationships like `owns_account`, and sample people such as “Alex Anderson” are **illustrative only**. You define your own playbooks, entities, and paths for your domain.
+
+---
+
 ## What you get
 
 | Today | With AnythingGraph |
@@ -23,18 +27,19 @@ No data lake. No ETL project. No copy-paste SQL into chat.
 
 ### 1. Playbook — the use case
 
-A playbook describes **what you care about** in business terms:
+A playbook describes **what you care about** in business terms — your entities, relationships, and access rules:
 
-- *Who is the customer?*
-- *What accounts do they own?*
-- *What payroll records exist for them?*
+- *Who is the person or role?*
+- *What records are they responsible for?*
+- *What related data may they see?*
 
-Included examples in `playbooks/`:
+**Demo playbooks** in `playbooks/` (copy and adapt — not prescriptive):
 
 | Playbook | Story |
 |----------|--------|
 | `simple-crm-access` | Sales rep → accounts they own |
 | `crm-payroll-access` | Same rep → accounts **and** payroll history from a CSV file |
+| `salesforce-lead-access` | Salesforce user → leads assigned to them |
 
 Playbooks are **portable**. The same playbook can point at different customer databases via bindings.
 
@@ -42,8 +47,8 @@ Playbooks are **portable**. The same playbook can point at different customer da
 
 Inside each playbook, an **ontology** is the shared language:
 
-- **Entities** — things in your world (`crm_user`, `crm_account`, `crm_payroll_record`)
-- **Relationships** — how they connect (`owns_account`, `user_has_payroll`)
+- **Entities** — things in your domain (demo examples use names like `crm_user`, `crm_account`)
+- **Relationships** — how they connect (demo examples: `owns_account`, `user_has_payroll`)
 
 Agents don’t need to know your table layout. They ask in playbook terms; AnythingGraph translates.
 
@@ -148,9 +153,35 @@ source, suggest how to map entities to my tables, test the binding, and save it.
 
 ---
 
+## Data adapters
+
+Adapters connect profiles to live systems. **Seven ship today**; more share the same playbook and binding model.
+
+| Adapter | Profile key | Typical source | Status |
+|---------|-------------|----------------|--------|
+| SQL | `sql` | PostgreSQL | **Available** |
+| CSV | `csv` | Local CSV / flat files | **Available** |
+| SOQL | `soql` | Salesforce | **Available** |
+| MySQL | `mysql` | MySQL, MariaDB | **Available** |
+| SQL Server | `mssql` | Microsoft SQL Server, Azure SQL | **Available** |
+| MongoDB | `mongodb` | MongoDB collections | **Available** |
+| REST / OpenAPI | `rest` | HTTP JSON APIs | **Available** |
+| BigQuery | `bigquery` | Google BigQuery | Planned |
+| Snowflake | `snowflake` | Snowflake | Planned |
+| Databricks | `databricks` | Databricks SQL | Planned |
+| Elasticsearch | `elasticsearch` | Elasticsearch / OpenSearch | Planned |
+| S3 / Parquet | `s3` | Object storage, Parquet files | Planned |
+| GraphQL | `graphql` | GraphQL endpoints | Planned |
+| Google Sheets | `google_sheets` | Spreadsheets | Planned |
+| HubSpot | `hubspot` | HubSpot CRM | Planned |
+
+Full adapter reference with introspection notes: **Anything CLI documentation**, section 7 — Data adapters (`website/anythingcli-documentation.html`).
+
+---
+
 ## Playbooks and bindings
 
-How to author playbook JSON and binding YAML: **[playbooks/README.md](playbooks/README.md)** (uses `crm-payroll-access` as the walkthrough example).
+How to author playbook JSON and binding YAML: **[playbooks/README.md](playbooks/README.md)** — or the web walkthrough at **`website/anythingcli-playbooks-guide.html`** (uses demo playbooks as examples).
 
 ---
 

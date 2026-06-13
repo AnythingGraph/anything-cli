@@ -1,3 +1,5 @@
+mod introspect;
+
 use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState, map_row_to_playbook_fields, row_map_to_json};
 use async_trait::async_trait;
 use binding_spec::PlaybookBinding;
@@ -5,6 +7,8 @@ use plan_ir::{EntityRef, PlanStep, StepResult};
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+
+pub use introspect::introspect_salesforce_schema;
 
 pub struct SoqlAdapter {
     http_client: Client,
@@ -22,6 +26,12 @@ impl Default for SoqlAdapter {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// Parsed Salesforce query response (records plus totalSize for COUNT() queries).
+struct SoqlQueryResult {
+    records: Vec<Value>,
+    total_size: u64,
 }
 
 #[async_trait]
@@ -55,13 +65,22 @@ impl DataAdapter for SoqlAdapter {
                 let query_template = entity_binding.lookup.get(lookup_key).ok_or_else(|| {
                     AdapterError::MissingOperation(format!("{entity}.{lookup_key}"))
                 })?;
-                let soql = query_template.replace(":name", &escape_soql_literal(by_value));
-                let records = run_soql_query(context, &self.http_client, &soql).await?;
-                let first_record = records.first().ok_or_else(|| {
+                let soql = apply_soql_parameters(query_template, by_value);
+                let query_result = run_soql_query(context, &self.http_client, &soql).await?;
+                let first_record = query_result.records.first().ok_or_else(|| {
                     AdapterError::Message(format!("no records for entity resolve: {entity}"))
                 })?;
-                let id_value = first_record
-                    .get(&entity_binding.id_field)
+                let physical_map: HashMap<String, Value> = first_record
+                    .as_object()
+                    .map(|object| object.iter().map(|(key, value)| (key.clone(), value.clone())).collect())
+                    .unwrap_or_default();
+                let mapped_row = map_row_to_playbook_fields(physical_map, entity_binding);
+                let id_value = entity_binding
+                    .fields
+                    .iter()
+                    .find(|(_, physical_column)| *physical_column == &entity_binding.id_field)
+                    .and_then(|(playbook_field, _)| mapped_row.get(playbook_field))
+                    .or_else(|| mapped_row.get(&entity_binding.id_field))
                     .and_then(|value| value.as_str())
                     .map(|value| value.to_string())
                     .ok_or_else(|| AdapterError::Message("resolved record missing id field".into()))?;
@@ -73,13 +92,13 @@ impl DataAdapter for SoqlAdapter {
                         entity: entity.clone(),
                         id_field: entity_binding.id_field.clone(),
                         id_value,
-                        display_value: first_record
+                        display_value: mapped_row
                             .get(by_field)
                             .and_then(|value| value.as_str())
                             .map(|value| value.to_string()),
                     }),
                     count: None,
-                    rows: Some(records),
+                    rows: Some(query_result.records),
                     source_query: Some(soql),
                     adapter: Some(self.adapter_type().to_string()),
                 })
@@ -100,26 +119,27 @@ impl DataAdapter for SoqlAdapter {
                         ))
                     })?;
                 let soql = query_template.replace(":subject_id", &escape_soql_literal(&subject.id_value));
-                let records = run_soql_query(context, &self.http_client, &soql).await?;
-                let count_value = records
+                let query_result = run_soql_query(context, &self.http_client, &soql).await?;
+                let count_value = query_result
+                    .records
                     .first()
                     .and_then(|row| row.get("expr0"))
                     .and_then(|value| value.as_u64())
                     .or_else(|| {
-                        records.first().and_then(|row| {
+                        query_result.records.first().and_then(|row| {
                             row.as_object().and_then(|object| {
                                 object.values().next().and_then(|value| value.as_u64())
                             })
                         })
                     })
-                    .unwrap_or(0);
+                    .unwrap_or(query_result.total_size);
 
                 Ok(StepResult {
                     step_index,
                     op: "count_for_subject".into(),
                     entity_ref: None,
                     count: Some(count_value),
-                    rows: Some(records),
+                    rows: Some(query_result.records),
                     source_query: Some(soql),
                     adapter: Some(self.adapter_type().to_string()),
                 })
@@ -146,14 +166,14 @@ impl DataAdapter for SoqlAdapter {
                 let soql = query_template
                     .replace(":subject_id", &escape_soql_literal(&subject.id_value))
                     .replace(":limit", &limit.to_string());
-                let records = run_soql_query(context, &self.http_client, &soql).await?;
+                let query_result = run_soql_query(context, &self.http_client, &soql).await?;
 
                 Ok(StepResult {
                     step_index,
                     op: "list_for_subject".into(),
                     entity_ref: None,
                     count: None,
-                    rows: Some(records),
+                    rows: Some(query_result.records),
                     source_query: Some(soql),
                     adapter: Some(self.adapter_type().to_string()),
                 })
@@ -180,9 +200,9 @@ impl DataAdapter for SoqlAdapter {
                 ))
             })?;
 
-        let physical_rows = run_soql_query(context, &self.http_client, query_template).await?;
+        let query_result = run_soql_query(context, &self.http_client, query_template).await?;
         let mut mapped_rows = Vec::new();
-        for row_value in physical_rows {
+        for row_value in query_result.records {
             if let Some(row_object) = row_value.as_object() {
                 let physical_map: HashMap<String, Value> =
                     row_object.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
@@ -195,12 +215,19 @@ impl DataAdapter for SoqlAdapter {
     }
 }
 
+// Replace named SOQL parameters with escaped literals.
+fn apply_soql_parameters(query_template: &str, parameter_value: &str) -> String {
+    query_template
+        .replace(":name", &escape_soql_literal(parameter_value))
+        .replace(":identifier", &escape_soql_literal(parameter_value))
+}
+
 // Execute one SOQL query via Salesforce REST API.
 async fn run_soql_query(
     context: &ExecContext,
     http_client: &Client,
     soql: &str,
-) -> Result<Vec<Value>, AdapterError> {
+) -> Result<SoqlQueryResult, AdapterError> {
     let instance_url = context
         .connection
         .instance_url
@@ -240,11 +267,37 @@ async fn run_soql_query(
         .and_then(|value| value.as_array())
         .cloned()
         .unwrap_or_default();
+    let total_size = payload
+        .get("totalSize")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(records.len() as u64);
 
-    Ok(records)
+    Ok(SoqlQueryResult {
+        records,
+        total_size,
+    })
 }
 
 // Escape a string literal for SOQL.
 fn escape_soql_literal(raw_value: &str) -> String {
     format!("'{}'", raw_value.replace('\'', "\\'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apply_soql_parameters_replaces_name_and_identifier() {
+        let query = "SELECT Id FROM User WHERE Id = :identifier OR Name = :name";
+        let rendered = apply_soql_parameters(query, "005ABC");
+        assert!(rendered.contains("'005ABC'"));
+        assert!(!rendered.contains(":identifier"));
+        assert!(!rendered.contains(":name"));
+    }
+
+    #[test]
+    fn escape_soql_literal_quotes_apostrophes() {
+        assert_eq!(escape_soql_literal("O'Brien"), "'O\\'Brien'");
+    }
 }

@@ -6,22 +6,34 @@ use crate::{EntityBinding, PlaybookBinding, RelationshipBinding};
 
 // Fill missing lookup SQL and relationship operations from declarative metadata.
 pub fn compile_binding_queries(binding: &mut PlaybookBinding) {
-    compile_entity_list_all_queries(binding);
+    let adapter_type = binding.adapter.trim().to_ascii_lowercase();
+
+    if adapter_type == "mongodb" {
+        compile_mongodb_binding_queries(binding);
+        return;
+    }
+
+    if adapter_type == "rest" {
+        compile_rest_binding_queries(binding);
+        return;
+    }
+
+    compile_entity_list_all_queries(binding, &adapter_type);
 
     for entity_binding in binding.entities.values_mut() {
-        compile_entity_lookups(entity_binding);
+        compile_entity_lookups(entity_binding, &adapter_type);
     }
 
     let relationship_names: Vec<String> = binding.relationships.keys().cloned().collect();
     for relationship_name in relationship_names {
         if let Some(relationship_binding) = binding.relationships.get_mut(&relationship_name) {
-            compile_relationship_operations(&binding.entities, relationship_binding);
+            compile_relationship_operations(&binding.entities, relationship_binding, &adapter_type);
         }
     }
 }
 
 // Generate list_all queries for entities (used by ReBAC graph materialization).
-fn compile_entity_list_all_queries(binding: &mut PlaybookBinding) {
+fn compile_entity_list_all_queries(binding: &mut PlaybookBinding, adapter_type: &str) {
     let object_link_columns: HashMap<String, Vec<String>> =
         collect_object_link_columns(binding);
 
@@ -55,8 +67,16 @@ fn compile_entity_list_all_queries(binding: &mut PlaybookBinding) {
 
         entity_binding.operations.insert(
             "list_all".into(),
-            format!("SELECT {select_columns} FROM {table_name}"),
+            format_list_all_query(adapter_type, &select_columns, &table_name),
         );
+    }
+}
+
+// Build dialect-specific list_all query text.
+fn format_list_all_query(adapter_type: &str, select_columns: &str, table_name: &str) -> String {
+    match adapter_type {
+        "mssql" => format!("SELECT {select_columns} FROM {table_name}"),
+        _ => format!("SELECT {select_columns} FROM {table_name}"),
     }
 }
 
@@ -86,7 +106,7 @@ fn collect_object_link_columns(binding: &PlaybookBinding) -> HashMap<String, Vec
 }
 
 // Generate entity lookup queries when only table/column metadata is present.
-fn compile_entity_lookups(entity_binding: &mut EntityBinding) {
+fn compile_entity_lookups(entity_binding: &mut EntityBinding, adapter_type: &str) {
     let table_name = match entity_binding.from.as_ref() {
         Some(value) if !value.trim().is_empty() => value.trim().to_string(),
         _ => return,
@@ -99,9 +119,7 @@ fn compile_entity_lookups(entity_binding: &mut EntityBinding) {
         if let Some(name_column) = resolve_name_column(entity_binding) {
             entity_binding.lookup.insert(
                 "by_name".into(),
-                format!(
-                    "SELECT {select_columns} FROM {table_name} WHERE {name_column} ILIKE :name LIMIT 1"
-                ),
+                format_name_lookup(adapter_type, &select_columns, &table_name, &name_column),
             );
         }
     }
@@ -109,10 +127,45 @@ fn compile_entity_lookups(entity_binding: &mut EntityBinding) {
     if !entity_binding.lookup.contains_key("by_identifier") {
         entity_binding.lookup.insert(
             "by_identifier".into(),
-            format!(
-                "SELECT {select_columns} FROM {table_name} WHERE {id_column} = :identifier LIMIT 1"
-            ),
+            format_identifier_lookup(adapter_type, &select_columns, &table_name, &id_column),
         );
+    }
+}
+
+// Build dialect-specific name lookup query.
+fn format_name_lookup(
+    adapter_type: &str,
+    select_columns: &str,
+    table_name: &str,
+    name_column: &str,
+) -> String {
+    match adapter_type {
+        "mysql" => format!(
+            "SELECT {select_columns} FROM {table_name} WHERE LOWER({name_column}) = LOWER(:name) LIMIT 1"
+        ),
+        "mssql" => format!(
+            "SELECT TOP 1 {select_columns} FROM {table_name} WHERE LOWER({name_column}) = LOWER(:name)"
+        ),
+        _ => format!(
+            "SELECT {select_columns} FROM {table_name} WHERE {name_column} ILIKE :name LIMIT 1"
+        ),
+    }
+}
+
+// Build dialect-specific identifier lookup query.
+fn format_identifier_lookup(
+    adapter_type: &str,
+    select_columns: &str,
+    table_name: &str,
+    id_column: &str,
+) -> String {
+    match adapter_type {
+        "mssql" => format!(
+            "SELECT TOP 1 {select_columns} FROM {table_name} WHERE {id_column} = :identifier"
+        ),
+        _ => format!(
+            "SELECT {select_columns} FROM {table_name} WHERE {id_column} = :identifier LIMIT 1"
+        ),
     }
 }
 
@@ -120,6 +173,7 @@ fn compile_entity_lookups(entity_binding: &mut EntityBinding) {
 fn compile_relationship_operations(
     entity_bindings: &HashMap<String, EntityBinding>,
     relationship_binding: &mut RelationshipBinding,
+    adapter_type: &str,
 ) {
     let subject_link_column = match relationship_binding.subject_link_column.as_ref() {
         Some(value) if !value.trim().is_empty() => value.trim().to_string(),
@@ -158,9 +212,7 @@ fn compile_relationship_operations(
     {
         relationship_binding.operations.insert(
             "count_for_subject".into(),
-            format!(
-                "SELECT COUNT(*)::bigint AS count FROM {object_table} WHERE {subject_link_column} = :subject_id"
-            ),
+            format_count_for_subject(adapter_type, &object_table, &subject_link_column),
         );
     }
 
@@ -170,10 +222,40 @@ fn compile_relationship_operations(
     {
         relationship_binding.operations.insert(
             "list_for_subject".into(),
-            format!(
-                "SELECT {list_columns} FROM {object_table} WHERE {subject_link_column} = :subject_id LIMIT :limit"
-            ),
+            format_list_for_subject(adapter_type, &list_columns, &object_table, &subject_link_column),
         );
+    }
+}
+
+// Build dialect-specific count query for a relationship.
+fn format_count_for_subject(adapter_type: &str, object_table: &str, subject_link_column: &str) -> String {
+    match adapter_type {
+        "mysql" => format!(
+            "SELECT COUNT(*) AS count FROM {object_table} WHERE {subject_link_column} = :subject_id"
+        ),
+        "mssql" => format!(
+            "SELECT COUNT(*) AS count FROM {object_table} WHERE {subject_link_column} = :subject_id"
+        ),
+        _ => format!(
+            "SELECT COUNT(*)::bigint AS count FROM {object_table} WHERE {subject_link_column} = :subject_id"
+        ),
+    }
+}
+
+// Build dialect-specific list query for a relationship.
+fn format_list_for_subject(
+    adapter_type: &str,
+    list_columns: &str,
+    object_table: &str,
+    subject_link_column: &str,
+) -> String {
+    match adapter_type {
+        "mssql" => format!(
+            "SELECT TOP (:limit) {list_columns} FROM {object_table} WHERE {subject_link_column} = :subject_id"
+        ),
+        _ => format!(
+            "SELECT {list_columns} FROM {object_table} WHERE {subject_link_column} = :subject_id LIMIT :limit"
+        ),
     }
 }
 
@@ -209,6 +291,182 @@ fn resolve_name_column(entity_binding: &EntityBinding) -> Option<String> {
         .iter()
         .find(|(field_name, _)| field_name.as_str() != entity_binding.id_field.as_str())
         .map(|(_, column_name)| column_name.clone())
+}
+
+// Compile MongoDB find/count operation templates from declarative entity metadata.
+fn compile_mongodb_binding_queries(binding: &mut PlaybookBinding) {
+    let object_link_columns = collect_object_link_columns(binding);
+
+    for (entity_name, entity_binding) in binding.entities.iter_mut() {
+        let collection_name = match entity_binding.from.as_ref() {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => continue,
+        };
+
+        if !entity_binding.operations.contains_key("list_all") {
+            entity_binding.operations.insert(
+                "list_all".into(),
+                format!("find:{collection_name}:{{}}"),
+            );
+        }
+
+        let id_field = resolve_physical_field(entity_binding, &entity_binding.id_field);
+        if !entity_binding.lookup.contains_key("by_identifier") {
+            entity_binding.lookup.insert(
+                "by_identifier".into(),
+                format!("find:{collection_name}:{{\"{id_field}\":\":identifier\"}}"),
+            );
+        }
+
+        if !entity_binding.lookup.contains_key("by_name") {
+            if let Some(name_field) = resolve_name_column(entity_binding) {
+                entity_binding.lookup.insert(
+                    "by_name".into(),
+                    format!(
+                        "find:{collection_name}:{{\"{name_field}\":{{\"$regex\":\"^:name$\",\"$options\":\"i\"}}}}"
+                    ),
+                );
+            }
+        }
+
+        if let Some(extra_columns) = object_link_columns.get(entity_name) {
+            for extra_column in extra_columns {
+                let _ = extra_column;
+            }
+        }
+    }
+
+    for relationship_binding in binding.relationships.values_mut() {
+        let subject_link_column = match relationship_binding.subject_link_column.as_ref() {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => continue,
+        };
+        let object_entity_name = match relationship_binding.join.as_ref() {
+            Some(join) => join.to_entity.clone(),
+            None => continue,
+        };
+        let object_binding = match binding.entities.get(&object_entity_name) {
+            Some(value) => value,
+            None => continue,
+        };
+        let collection_name = match object_binding.from.as_ref() {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => continue,
+        };
+
+        if !relationship_binding
+            .operations
+            .contains_key("count_for_subject")
+        {
+            relationship_binding.operations.insert(
+                "count_for_subject".into(),
+                format!("count:{collection_name}:{{\"{subject_link_column}\":\":subject_id\"}}"),
+            );
+        }
+
+        if !relationship_binding
+            .operations
+            .contains_key("list_for_subject")
+        {
+            relationship_binding.operations.insert(
+                "list_for_subject".into(),
+                format!(
+                    "find:{collection_name}:{{\"{subject_link_column}\":\":subject_id\"}}:limit=:limit"
+                ),
+            );
+        }
+    }
+}
+
+// Compile REST HTTP operation templates from declarative entity metadata.
+fn compile_rest_binding_queries(binding: &mut PlaybookBinding) {
+    for entity_binding in binding.entities.values_mut() {
+        let resource_path = match entity_binding.from.as_ref() {
+            Some(value) if !value.trim().is_empty() => normalize_rest_path(value.trim()),
+            _ => continue,
+        };
+
+        if !entity_binding.operations.contains_key("list_all") {
+            entity_binding.operations.insert(
+                "list_all".into(),
+                format!("GET {resource_path}"),
+            );
+        }
+
+        let id_field = resolve_physical_field(entity_binding, &entity_binding.id_field);
+        if !entity_binding.lookup.contains_key("by_identifier") {
+            entity_binding.lookup.insert(
+                "by_identifier".into(),
+                format!("GET {resource_path}/:{id_field}"),
+            );
+        }
+
+        if !entity_binding.lookup.contains_key("by_name") {
+            if let Some(name_field) = resolve_name_column(entity_binding) {
+                entity_binding.lookup.insert(
+                    "by_name".into(),
+                    format!("GET {resource_path}?{name_field}=:name"),
+                );
+            }
+        }
+    }
+
+    for relationship_binding in binding.relationships.values_mut() {
+        let subject_link_column = match relationship_binding.subject_link_column.as_ref() {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => continue,
+        };
+        let object_entity_name = match relationship_binding.join.as_ref() {
+            Some(join) => join.to_entity.clone(),
+            None => continue,
+        };
+        let object_binding = match binding.entities.get(&object_entity_name) {
+            Some(value) => value,
+            None => continue,
+        };
+        let resource_path = match object_binding.from.as_ref() {
+            Some(value) if !value.trim().is_empty() => normalize_rest_path(value.trim()),
+            _ => continue,
+        };
+
+        if !relationship_binding
+            .operations
+            .contains_key("count_for_subject")
+        {
+            relationship_binding.operations.insert(
+                "count_for_subject".into(),
+                format!("GET {resource_path}?{subject_link_column}=:subject_id"),
+            );
+        }
+
+        if !relationship_binding
+            .operations
+            .contains_key("list_for_subject")
+        {
+            relationship_binding.operations.insert(
+                "list_for_subject".into(),
+                format!("GET {resource_path}?{subject_link_column}=:subject_id&limit=:limit"),
+            );
+        }
+    }
+}
+
+// Resolve playbook field to physical column/JSON field name.
+fn resolve_physical_field(entity_binding: &EntityBinding, playbook_field: &str) -> String {
+    entity_binding
+        .fields
+        .get(playbook_field)
+        .cloned()
+        .unwrap_or_else(|| playbook_field.to_string())
+}
+
+// Ensure REST resource paths start with a slash.
+fn normalize_rest_path(raw_path: &str) -> String {
+    if raw_path.starts_with('/') {
+        raw_path.to_string()
+    } else {
+        format!("/{raw_path}")
+    }
 }
 
 // Validate binding entity/relationship names against a playbook definition.

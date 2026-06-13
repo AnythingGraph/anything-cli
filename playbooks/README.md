@@ -2,10 +2,15 @@
 
 Sample playbooks for AnythingGraph CLI. Setup and MCP usage: **[main README](../README.md)**.
 
+**Step-by-step authoring guide (web):** open `website/anythingcli-playbooks-guide.html` in the OSS repo — or follow the sections below.
+
+**These are demo playbooks only** — names like `crm_user`, `owns_account`, and `crm-payroll-access` illustrate the format. Author your own playbooks for your domain.
+
 | Playbook | Sources |
 |----------|---------|
 | `simple-crm-access` | Postgres |
 | `crm-payroll-access` | Postgres + CSV |
+| `salesforce-lead-access` | Salesforce (User + Lead) |
 
 ---
 
@@ -24,8 +29,7 @@ Working example in this folder: `crm-payroll-access.json` with `../bindings/crm-
 | `entity_relationships[]` | How entities connect (`owns_account`: user → account) |
 | `entity_sources` | Which source key each entity lives on (`postgres`, `csv`, …) |
 | `bindings` | Maps source keys → binding file stems (no `.yaml`) |
-| `default_binding` | Fallback when routing cannot infer a binding |
-| `relationship_access_rules` | Optional ReBAC (who may read which rows) |
+| `relationship_access_rules` | Optional ReBAC; set `"active": true` to enforce at runtime |
 
 Minimal shape (CRM + payroll across Postgres and CSV):
 
@@ -80,14 +84,13 @@ Minimal shape (CRM + payroll across Postgres and CSV):
   "bindings": {
     "postgres": "crm-payroll-access.postgres",
     "csv": "crm-payroll-access.csv"
-  },
-  "default_binding": "crm-payroll-access.postgres"
+  }
 }
 ```
 
 **Field names** in the playbook are the stable vocabulary agents use. Physical column names are mapped in binding YAML (`fields` below).
 
-**Optional ReBAC** — add `relationship_access_rules` with `implementation_status: "enforced"` and allow rules that walk `entity_relationships` paths. See `crm-payroll-access.json` for a full example.
+**Optional ReBAC** — add `relationship_access_rules` with `"active": true` and allow rules that walk `entity_relationships` paths. See `crm-payroll-access.json` for a full example.
 
 ### 2. Binding YAML — where data lives
 
@@ -163,6 +166,44 @@ When the CSV column name differs from the playbook (`user` vs `user_id`), map it
 
 You do **not** need to write SQL for lookups or counts: with `from`, `id_field`, `fields`, and `subject_link_column`, Rust compiles the queries automatically.
 
+**Salesforce** (`../bindings/salesforce-lead-access.salesforce.yaml`):
+
+```yaml
+adapter: soql
+playbook_id: salesforce-lead-access
+source_id: salesforce_main
+
+entities:
+  crm_user:
+    from: User
+    id_field: Id
+    fields:
+      user_id: Id
+      full_name: Name
+
+  crm_lead:
+    from: Lead
+    id_field: Id
+    fields:
+      lead_id: Id
+      lead_name: Name
+
+relationships:
+  assigned_to:
+    join:
+      from_entity: crm_user
+      to_entity: crm_lead
+      on: "Lead.OwnerId = User.Id"
+    subject_link_column: OwnerId
+    operations:
+      count_for_subject: "SELECT COUNT() FROM Lead WHERE OwnerId = :subject_id"
+      list_for_subject: "SELECT Id, Name FROM Lead WHERE OwnerId = :subject_id LIMIT :limit"
+```
+
+- `from` — Salesforce object API name (`User`, `Lead`, …)
+- Use explicit SOQL for count/list when needed (`COUNT()` returns `totalSize`, not row aggregates)
+- MCP: `introspect_source(source_id=salesforce_main)` describes objects; optional `schema_name=User,Lead` to limit scope
+
 ### 3. Profile — credentials
 
 `../profiles/local.yaml` registers sources referenced by `source_id`:
@@ -175,9 +216,13 @@ sources:
   payroll_csv:
     adapter: csv
     file_path: env:AG_PAYROLL_CSV_PATH
+  salesforce_main:
+    adapter: soql
+    instance_url: env:AG_SF_INSTANCE_URL
+    auth: env:AG_SF_ACCESS_TOKEN
 ```
 
-Set env vars before starting (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, etc.).
+Set env vars before starting (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_INSTANCE_URL`, `AG_SF_ACCESS_TOKEN`, etc.).
 
 ### 4. File layout
 

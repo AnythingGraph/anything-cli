@@ -1,20 +1,16 @@
 [package]
-name = "adapter-sql"
-description = "SQL adapter for federated playbook queries"
+name = "adapter-mongodb"
+description = "MongoDB adapter for federated playbook queries"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+mongodb = "3.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { workspace = true }
 thiserror = { workspace = true }
-tiberius = { workspace = true }
-tokio-util = { workspace = true }
-futures-util = "0.3"
-tokio = { workspace = true }
 adapter-core = { workspace = true }
 binding-spec = { workspace = true }
 plan-ir = { workspace = true }

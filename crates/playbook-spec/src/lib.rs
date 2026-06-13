@@ -167,10 +167,18 @@ pub fn playbook_context_summary(playbook: &PlaybookDefinition) -> PlaybookContex
 
 // True when playbook relationship_access_rules are enforced at runtime.
 fn is_rebac_enforced(playbook: &PlaybookDefinition) -> bool {
-    playbook
-        .relationship_access_rules
-        .as_ref()
-        .and_then(|value| value.get("implementation_status"))
+    let Some(rules) = playbook.relationship_access_rules.as_ref() else {
+        return false;
+    };
+    if rules
+        .get("active")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    rules
+        .get("implementation_status")
         .and_then(|status| status.as_str())
         == Some("enforced")
 }

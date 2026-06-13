@@ -14,6 +14,8 @@ adapter-core = { workspace = true }
 adapter-sql = { workspace = true }
 adapter-soql = { workspace = true }
 adapter-csv = { workspace = true }
+adapter-mongodb = { workspace = true }
+adapter-rest = { workspace = true }
 binding-spec = { workspace = true }
 plan-compiler = { workspace = true }
 plan-ir = { workspace = true }

@@ -50,13 +50,12 @@
   "bindings": {
     "postgres": "simple-crm-access.postgres"
   },
-  "default_binding": "simple-crm-access.postgres",
   "relationship_access_rules": {
     "summary": "CRM users read only accounts they own.",
     "subject_entity_name": "crm_user",
     "subject_identifier_field": "user_id",
     "deny_by_default": true,
-    "implementation_status": "enforced",
+    "active": true,
     "rules": [
       {
         "id": "own_accounts",

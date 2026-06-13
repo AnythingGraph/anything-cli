@@ -24,6 +24,6 @@ pub use materialize::{
 pub use subject::{resolve_subject, SubjectResolveError};
 pub use types::{
     FieldMatchRule, FieldMatchType, PathDirection, RebacAction, RebacEffect,
-    RebacImplementationStatus, RelationshipAccessPathStep, RelationshipAccessRule,
+    RelationshipAccessPathStep, RelationshipAccessRule,
     RelationshipAccessRules, RowKey, SubjectCondition, SubjectConditionOperator, SubjectContext,
 };

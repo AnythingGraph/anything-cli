@@ -103,6 +103,8 @@ pub fn build_exec_context(
             instance_url: std::env::var("AG_SF_INSTANCE_URL").ok(),
             auth: std::env::var("AG_SF_ACCESS_TOKEN").ok(),
             file_path: std::env::var("AG_PAYROLL_CSV_PATH").ok(),
+            base_url: std::env::var("AG_REST_BASE_URL").ok(),
+            database: std::env::var("AG_MONGODB_DATABASE").ok(),
         }
     };
 

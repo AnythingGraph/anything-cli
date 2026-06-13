@@ -11,6 +11,7 @@ reqwest = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 adapter-core = { workspace = true }
+adapter-sql = { workspace = true }
 binding-spec = { workspace = true }
 plan-ir = { workspace = true }
 urlencoding = "2"

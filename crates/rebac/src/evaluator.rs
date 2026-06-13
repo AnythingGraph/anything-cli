@@ -330,7 +330,7 @@ mod tests {
     use super::*;
     use crate::graph::{MemoryGraph, RelationshipLink};
     use crate::types::{
-        RebacImplementationStatus, RelationshipAccessPathStep, RelationshipAccessRule,
+        RebacEffect, RelationshipAccessPathStep, RelationshipAccessRule,
     };
 
     fn crm_payroll_rules() -> RelationshipAccessRules {
@@ -339,8 +339,9 @@ mod tests {
             subject_entity_name: "crm_user".into(),
             subject_identifier_field: "user_id".into(),
             deny_by_default: true,
-            implementation_status: Some(RebacImplementationStatus::Enforced),
+            active: true,
             implementation_note: None,
+            implementation_status: None,
             rules: vec![
                 RelationshipAccessRule {
                     id: "own_accounts".into(),

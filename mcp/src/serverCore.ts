@@ -26,7 +26,7 @@ const THIN_MCP_INSTRUCTIONS = [
   '4) save_binding(playbook_id, adapter_suffix, binding_yaml)',
   '5) query_graph(playbook_id, ...) — binding auto-routed from entity_sources + bindings when binding_name omitted.',
   '6) list_allowed_rows(playbook_id, subject_id) — discover visible row ids under enforced ReBAC.',
-  'When relationship_access_rules.implementation_status is enforced, pass subject_id or resolve the subject entity.',
+  'When relationship_access_rules.active is true, pass subject_id or resolve the subject entity.',
   'Playbook JSON may include a bindings map: source keys → binding file stems (see get_playbook_context).',
   'Binding files live in bindings/ as {playbook_id}.{adapter_suffix}.yaml (use list_bindings for loaded stems).',
   'Federated playbooks route entities to sources via entity_sources + bindings; omit binding_name on query_graph to auto-route.',
@@ -112,10 +112,15 @@ export function createThinMcpServer(): McpServer {
 
   server.tool(
     'introspect_source',
-    'Read Postgres schema (tables, columns, foreign keys) for agent mapping',
+    'Read source schema for agent mapping (Postgres tables, CSV columns, or Salesforce objects)',
     {
-      source_id: z.string().describe('Profile source id, e.g. warehouse_pg'),
-      schema_name: z.string().optional().describe('Postgres schema, default public'),
+      source_id: z.string().describe('Profile source id, e.g. warehouse_pg or salesforce_main'),
+      schema_name: z
+        .string()
+        .optional()
+        .describe(
+          'Postgres schema (default public), or comma-separated Salesforce object names (default: common CRM objects)',
+        ),
     },
     async ({ source_id: sourceId, schema_name: schemaName }) => {
       const result = await introspectSource(sourceId, schemaName);
@@ -223,7 +228,7 @@ export function createThinMcpServer(): McpServer {
     {
       playbook_id: z.string(),
       subject_id: z.string().optional(),
-      binding_name: z.string().optional().describe('Binding file stem; defaults to playbook default_binding'),
+      binding_name: z.string().optional().describe('Binding file stem; auto-routed from entity_sources + bindings when omitted'),
       entity: z.string().describe('Entity to resolve, e.g. crm_user'),
       by_name: z.string().optional(),
       by_identifier: z.string().optional(),

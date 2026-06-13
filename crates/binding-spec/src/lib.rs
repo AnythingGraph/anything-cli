@@ -38,6 +38,10 @@ pub struct SourceConnection {
     pub auth: Option<String>,
     #[serde(default)]
     pub file_path: Option<String>,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub database: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

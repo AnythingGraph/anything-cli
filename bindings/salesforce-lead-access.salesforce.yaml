@@ -1,4 +1,5 @@
 adapter: soql
+playbook_id: salesforce-lead-access
 source_id: salesforce_main
 version: 1
 
@@ -26,6 +27,7 @@ relationships:
       from_entity: crm_user
       to_entity: crm_lead
       on: "Lead.OwnerId = User.Id"
+    subject_link_column: OwnerId
     operations:
       count_for_subject: "SELECT COUNT() FROM Lead WHERE OwnerId = :subject_id"
       list_for_subject: "SELECT Id, Name FROM Lead WHERE OwnerId = :subject_id LIMIT :limit"
