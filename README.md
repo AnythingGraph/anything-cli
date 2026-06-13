@@ -148,6 +148,12 @@ source, suggest how to map entities to my tables, test the binding, and save it.
 
 ---
 
+## Playbooks and bindings
+
+How to author playbook JSON and binding YAML: **[playbooks/README.md](playbooks/README.md)** (uses `crm-payroll-access` as the walkthrough example).
+
+---
+
 ## Technical reference
 
 ### Install & run
@@ -207,24 +213,11 @@ Payroll sample data: `data/payroll.csv` (column `user` links to `users.user_id`)
 cargo run -p anythinggraph-ag -- validate --playbooks playbooks
 ```
 
-### Add a new playbook
+See **[playbooks/README.md](playbooks/README.md)** for the full authoring walkthrough.
 
-1. Create `playbooks/your-playbook.json` — entities, relationships, `entity_sources`, `bindings` map.
-2. Add binding files under `bindings/` (e.g. `your-playbook.postgres.yaml`).
-3. Validate and test via MCP `query_graph`.
+### Credentials and profiles
 
-Templates: `playbooks/simple-crm-access.json`, `playbooks/crm-payroll-access.json`.
-
-### Add or edit a binding
-
-Bindings live in `bindings/`. Each file maps playbook entities to physical tables or files.
-
-- Postgres: `bindings/crm-payroll-access.postgres.yaml`
-- CSV: `bindings/crm-payroll-access.csv.yaml` (maps playbook `user_id` → CSV column `user`)
-
-Use MCP `propose_binding` and `test_binding` before `save_binding`, or edit YAML and restart `./start-all.sh`.
-
-Credentials: `profiles/local.yaml` and env vars (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_*`).
+Source credentials: `profiles/local.yaml` and env vars (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_*`). Details in the playbooks guide.
 
 ### Full MCP tool list
 

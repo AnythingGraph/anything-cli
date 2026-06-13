@@ -63,6 +63,8 @@ pub struct EntityBinding {
     pub fields: HashMap<String, String>,
     #[serde(default)]
     pub lookup: HashMap<String, String>,
+    #[serde(default)]
+    pub operations: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

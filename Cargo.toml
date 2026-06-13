@@ -11,6 +11,7 @@ members = [
     "crates/adapter-soql",
     "crates/adapter-csv",
     "crates/runtime",
+    "crates/rebac",
     "reasoning-service",
     "ag-cli",
 ]
@@ -46,3 +47,4 @@ adapter-sql = { path = "crates/adapter-sql" }
 adapter-soql = { path = "crates/adapter-soql" }
 adapter-csv = { path = "crates/adapter-csv" }
 runtime = { path = "crates/runtime" }
+rebac = { path = "crates/rebac" }

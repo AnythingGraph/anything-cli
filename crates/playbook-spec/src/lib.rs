@@ -160,7 +160,29 @@ pub fn playbook_context_summary(playbook: &PlaybookDefinition) -> PlaybookContex
         entity_sources: playbook.entity_sources.clone(),
         bindings: playbook.bindings.clone(),
         default_binding: playbook.default_binding.clone(),
+        rebac_enforced: is_rebac_enforced(playbook),
+        rebac_subject_entity: rebac_subject_entity_name(playbook),
     }
+}
+
+// True when playbook relationship_access_rules are enforced at runtime.
+fn is_rebac_enforced(playbook: &PlaybookDefinition) -> bool {
+    playbook
+        .relationship_access_rules
+        .as_ref()
+        .and_then(|value| value.get("implementation_status"))
+        .and_then(|status| status.as_str())
+        == Some("enforced")
+}
+
+// Subject entity name from relationship_access_rules when present.
+fn rebac_subject_entity_name(playbook: &PlaybookDefinition) -> Option<String> {
+    playbook
+        .relationship_access_rules
+        .as_ref()
+        .and_then(|value| value.get("subject_entity_name"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +200,10 @@ pub struct PlaybookContextSummary {
     pub bindings: Option<std::collections::HashMap<String, String>>,
     #[serde(default)]
     pub default_binding: Option<String>,
+    #[serde(default)]
+    pub rebac_enforced: bool,
+    #[serde(default)]
+    pub rebac_subject_entity: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

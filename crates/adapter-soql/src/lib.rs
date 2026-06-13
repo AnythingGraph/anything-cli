@@ -1,9 +1,10 @@
-use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState};
+use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState, map_row_to_playbook_fields, row_map_to_json};
 use async_trait::async_trait;
 use binding_spec::PlaybookBinding;
 use plan_ir::{EntityRef, PlanStep, StepResult};
 use reqwest::Client;
 use serde_json::Value;
+use std::collections::HashMap;
 
 pub struct SoqlAdapter {
     http_client: Client,
@@ -158,6 +159,39 @@ impl DataAdapter for SoqlAdapter {
                 })
             }
         }
+    }
+
+    async fn load_entity_rows(
+        &self,
+        entity_name: &str,
+        binding: &PlaybookBinding,
+        context: &ExecContext,
+    ) -> Result<Vec<Value>, AdapterError> {
+        let entity_binding = binding.entities.get(entity_name).ok_or_else(|| {
+            AdapterError::MissingEntityBinding(entity_name.to_string())
+        })?;
+
+        let query_template = entity_binding
+            .operations
+            .get("list_all")
+            .ok_or_else(|| {
+                AdapterError::MissingOperation(format!(
+                    "{entity_name}.operations.list_all (add declarative from/fields or explicit list_all SOQL)"
+                ))
+            })?;
+
+        let physical_rows = run_soql_query(context, &self.http_client, query_template).await?;
+        let mut mapped_rows = Vec::new();
+        for row_value in physical_rows {
+            if let Some(row_object) = row_value.as_object() {
+                let physical_map: HashMap<String, Value> =
+                    row_object.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
+                mapped_rows.push(row_map_to_json(
+                    map_row_to_playbook_fields(physical_map, entity_binding),
+                ));
+            }
+        }
+        Ok(mapped_rows)
     }
 }
 

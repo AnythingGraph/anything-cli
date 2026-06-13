@@ -52,6 +52,14 @@ struct SaveBindingRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct RebacAllowedRowsRequest {
+    pub playbook_id: String,
+    pub subject_id: String,
+    #[serde(default)]
+    pub entity_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct SuggestBindingsRequest {
     source_id: String,
     #[serde(default)]
@@ -107,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/plan", post(plan_handler))
         .route("/execute", post(execute_handler))
         .route("/query", post(query_handler))
+        .route("/rebac/allowed-rows", post(rebac_allowed_rows_handler))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -259,6 +268,22 @@ async fn test_binding_handler(
     state
         .runtime
         .test_binding(&request)
+        .await
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+async fn rebac_allowed_rows_handler(
+    State(state): State<AppState>,
+    Json(request): Json<RebacAllowedRowsRequest>,
+) -> Result<Json<runtime::RebacAllowedRowsResponse>, (StatusCode, String)> {
+    state
+        .runtime
+        .rebac_allowed_rows(
+            &request.playbook_id,
+            &request.subject_id,
+            request.entity_name.as_deref(),
+        )
         .await
         .map(Json)
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))

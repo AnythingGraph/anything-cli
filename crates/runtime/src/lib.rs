@@ -23,6 +23,8 @@ use playbook_spec::{
 use proof::ProofEnvelope;
 use tokio::sync::RwLock;
 
+mod rebac_enforce;
+
 pub struct RuntimeConfig {
     pub playbooks_dir: PathBuf,
     pub bindings_dir: PathBuf,
@@ -31,10 +33,10 @@ pub struct RuntimeConfig {
 
 pub struct ReasoningRuntime {
     config: RuntimeConfig,
-    playbooks: RwLock<HashMap<String, PlaybookDefinition>>,
-    bindings: RwLock<HashMap<String, PlaybookBinding>>,
-    profile: RwLock<SourceProfile>,
-    adapters: AdapterRegistry,
+    pub(crate) playbooks: RwLock<HashMap<String, PlaybookDefinition>>,
+    pub(crate) bindings: RwLock<HashMap<String, PlaybookBinding>>,
+    pub(crate) profile: RwLock<SourceProfile>,
+    pub(crate) adapters: AdapterRegistry,
 }
 
 impl ReasoningRuntime {
@@ -135,8 +137,17 @@ impl ReasoningRuntime {
 
     // Execute a plan against configured bindings and adapters.
     pub async fn execute_plan(&self, plan: &Plan) -> Result<ProofEnvelope> {
+        let playbooks = self.playbooks.read().await;
+        let playbook = playbooks
+            .get(&plan.playbook_id)
+            .ok_or_else(|| anyhow!("playbook not found: {}", plan.playbook_id))?
+            .clone();
+        drop(playbooks);
+
+        let rebac_state = rebac_enforce::try_build_rebac_state(self, &playbook).await?;
         let binding = self.resolve_binding(plan).await?;
-        self.execute_plan_with_binding(plan, &binding).await
+        self.execute_plan_with_binding_and_rebac(plan, &binding, rebac_state.as_ref())
+            .await
     }
 
     // Execute a plan using an explicit binding (used for binding tests).
@@ -144,6 +155,25 @@ impl ReasoningRuntime {
         &self,
         plan: &Plan,
         binding: &PlaybookBinding,
+    ) -> Result<ProofEnvelope> {
+        let playbooks = self.playbooks.read().await;
+        let playbook = playbooks
+            .get(&plan.playbook_id)
+            .ok_or_else(|| anyhow!("playbook not found: {}", plan.playbook_id))?
+            .clone();
+        drop(playbooks);
+
+        let rebac_state = rebac_enforce::try_build_rebac_state(self, &playbook).await?;
+        self.execute_plan_with_binding_and_rebac(plan, binding, rebac_state.as_ref())
+            .await
+    }
+
+    // Execute plan with optional ReBAC enforcement state.
+    async fn execute_plan_with_binding_and_rebac(
+        &self,
+        plan: &Plan,
+        binding: &PlaybookBinding,
+        rebac_state: Option<&rebac_enforce::RebacState>,
     ) -> Result<ProofEnvelope> {
         let profile = self.profile.read().await.clone();
         let context = build_exec_context(binding, &profile)
@@ -156,6 +186,21 @@ impl ReasoningRuntime {
 
         let mut state = ExecutionState::default();
         let mut step_results = Vec::new();
+        let mut access_subject: Option<rebac::SubjectContext> = None;
+
+        if let Some(rebac_state) = rebac_state {
+            if let Some(subject_id) = plan
+                .subject_id
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+            {
+                access_subject = Some(
+                    rebac::resolve_subject(&rebac_state.rules, &rebac_state.graph, subject_id)
+                        .map_err(|error| anyhow!("rebac subject resolve failed: {error}"))?,
+                );
+            }
+        }
 
         for (step_index, step) in plan.steps.iter().enumerate() {
             let step_result = adapter
@@ -165,15 +210,80 @@ impl ReasoningRuntime {
 
             if let Some(entity_ref) = step_result.entity_ref.as_ref() {
                 state.current_subject = Some(entity_ref.clone());
+                if rebac_state.is_some() && access_subject.is_none() {
+                    access_subject = Some(rebac::SubjectContext {
+                        entity_name: entity_ref.entity.clone(),
+                        identifier_value: entity_ref.id_value.clone(),
+                    });
+                }
             }
-            step_results.push(step_result);
+
+            let mut enforced_step_result = step_result;
+            if let Some(rebac_state) = rebac_state {
+                let subject = access_subject.as_ref().ok_or_else(|| {
+                    anyhow!("rebac enforced: provide subject_id or resolve the access subject entity")
+                })?;
+                rebac_enforce::apply_rebac_to_step(
+                    rebac_state,
+                    subject,
+                    step,
+                    &mut enforced_step_result,
+                )
+                .map_err(|error| anyhow!("{error}"))?;
+            }
+
+            step_results.push(enforced_step_result);
         }
 
+        let rebac_applied = rebac_state.is_some();
         Ok(proof::build_proof_envelope(
             plan.playbook_id.clone(),
             plan.subject_id.clone(),
             step_results,
+            rebac_applied,
         ))
+    }
+
+    // List row ids a subject may read for one entity under enforced ReBAC.
+    pub async fn rebac_allowed_rows(
+        &self,
+        playbook_id: &str,
+        subject_id: &str,
+        entity_name: Option<&str>,
+    ) -> Result<RebacAllowedRowsResponse> {
+        let playbooks = self.playbooks.read().await;
+        let playbook = playbooks
+            .get(playbook_id)
+            .ok_or_else(|| anyhow!("playbook not found: {playbook_id}"))?
+            .clone();
+        drop(playbooks);
+
+        let rebac_state = rebac_enforce::try_build_rebac_state(self, &playbook)
+            .await?
+            .ok_or_else(|| anyhow!("playbook '{playbook_id}' has no enforced relationship_access_rules"))?;
+
+        let subject = rebac::resolve_subject(&rebac_state.rules, &rebac_state.graph, subject_id)
+            .map_err(|error| anyhow!("rebac subject resolve failed: {error}"))?;
+
+        let entity_names: Vec<String> = if let Some(entity) = entity_name {
+            vec![entity.to_string()]
+        } else {
+            playbook.entities.iter().map(|entity| entity.name.clone()).collect()
+        };
+
+        let mut allowed_by_entity = HashMap::new();
+        for entity in entity_names {
+            let allowed_ids =
+                rebac_enforce::allowed_row_ids_for_entity(&rebac_state, &subject, &entity);
+            allowed_by_entity.insert(entity, allowed_ids);
+        }
+
+        Ok(RebacAllowedRowsResponse {
+            playbook_id: playbook_id.to_string(),
+            subject_id: subject_id.to_string(),
+            rebac_applied: true,
+            allowed_rows_by_entity: allowed_by_entity,
+        })
     }
 
     // Compile and execute in one call.
@@ -490,6 +600,14 @@ impl ReasoningRuntime {
             .cloned()
             .ok_or_else(|| anyhow!("no binding found for playbook '{}'", plan.playbook_id))
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RebacAllowedRowsResponse {
+    pub playbook_id: String,
+    pub subject_id: String,
+    pub rebac_applied: bool,
+    pub allowed_rows_by_entity: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

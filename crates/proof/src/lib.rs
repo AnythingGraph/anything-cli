@@ -8,6 +8,8 @@ pub struct ProofEnvelope {
     #[serde(default)]
     pub subject_id: Option<String>,
     #[serde(default)]
+    pub rebac_applied: bool,
+    #[serde(default)]
     pub answer_text: Option<String>,
     pub steps: Vec<StepResult>,
     #[serde(default)]
@@ -27,6 +29,7 @@ pub fn build_proof_envelope(
     playbook_id: String,
     subject_id: Option<String>,
     step_results: Vec<StepResult>,
+    rebac_applied: bool,
 ) -> ProofEnvelope {
     let mut resolved_entity = None;
     let mut resolved_id = None;
@@ -52,6 +55,7 @@ pub fn build_proof_envelope(
         ok: true,
         playbook_id,
         subject_id,
+        rebac_applied,
         answer_text,
         steps: step_results,
         summary: Some(ProofSummary {

@@ -163,3 +163,17 @@ export async function runQuery(queryRequest: Record<string, unknown>): Promise<R
   });
   return parseJsonResponse(response, 'query');
 }
+
+// List row ids a subject may read under enforced ReBAC.
+export async function rebacAllowedRows(payload: {
+  playbook_id: string;
+  subject_id: string;
+  entity_name?: string;
+}): Promise<Record<string, unknown>> {
+  const response = await fetch(`${getReasoningBaseUrl()}/rebac/allowed-rows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(response, 'rebac allowed rows');
+}

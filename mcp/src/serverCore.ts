@@ -10,6 +10,7 @@ import {
   listSources,
   proposeBinding,
   reasoningHealthCheck,
+  rebacAllowedRows,
   runQuery,
   saveBinding,
   suggestBindings,
@@ -24,9 +25,11 @@ const THIN_MCP_INSTRUCTIONS = [
   '3) propose_binding(playbook_id, binding_yaml) → test_binding(..., execute=true)',
   '4) save_binding(playbook_id, adapter_suffix, binding_yaml)',
   '5) query_graph(playbook_id, ...) — binding auto-routed from entity_sources + bindings when binding_name omitted.',
-  'Playbook bindings map: { "postgres": "crm-payroll-access.postgres", "csv": "crm-payroll-access.csv" }.',
-  'Bindings are playbook-scoped files like simple-crm-access.postgres.yaml or crm-payroll-access.csv.yaml.',
-  'Multi-source example: crm-payroll-access uses crm-payroll-access.postgres for accounts and crm-payroll-access.csv for payroll.',
+  '6) list_allowed_rows(playbook_id, subject_id) — discover visible row ids under enforced ReBAC.',
+  'When relationship_access_rules.implementation_status is enforced, pass subject_id or resolve the subject entity.',
+  'Playbook JSON may include a bindings map: source keys → binding file stems (see get_playbook_context).',
+  'Binding files live in bindings/ as {playbook_id}.{adapter_suffix}.yaml (use list_bindings for loaded stems).',
+  'Federated playbooks route entities to sources via entity_sources + bindings; omit binding_name on query_graph to auto-route.',
   'Declarative bindings: set from/id_field/fields and subject_link_column; Rust compiles SQL.',
   'Set AG_REASONING_URL (default http://127.0.0.1:8787).',
 ].join('\n');
@@ -307,6 +310,26 @@ export function createThinMcpServer(): McpServer {
       const proof = await runQuery(queryRequest);
       return {
         content: [{ type: 'text', text: JSON.stringify(proof, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'list_allowed_rows',
+    'List row identifiers a subject may read under enforced relationship_access_rules',
+    {
+      playbook_id: z.string(),
+      subject_id: z.string().describe('Access subject identifier, e.g. crm_user.user_id value'),
+      entity_name: z.string().optional().describe('Optional entity filter; omit for all entities'),
+    },
+    async (args) => {
+      const result = await rebacAllowedRows({
+        playbook_id: args.playbook_id,
+        subject_id: args.subject_id,
+        entity_name: args.entity_name,
+      });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     },
   );

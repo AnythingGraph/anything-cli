@@ -73,5 +73,46 @@
     "postgres": "crm-payroll-access.postgres",
     "csv": "crm-payroll-access.csv"
   },
-  "default_binding": "crm-payroll-access.postgres"
+  "default_binding": "crm-payroll-access.postgres",
+  "relationship_access_rules": {
+    "summary": "CRM users read accounts they own and their own payroll records.",
+    "subject_entity_name": "crm_user",
+    "subject_identifier_field": "user_id",
+    "deny_by_default": true,
+    "implementation_status": "enforced",
+    "rules": [
+      {
+        "id": "own_accounts",
+        "name": "Own accounts",
+        "effect": "allow",
+        "action": "read",
+        "resource_entity_name": "crm_account",
+        "description": "Accounts linked via owns_account",
+        "path": [
+          {
+            "relationship_name": "owns_account",
+            "direction": "forward",
+            "from_entity_name": "crm_user",
+            "to_entity_name": "crm_account"
+          }
+        ]
+      },
+      {
+        "id": "own_payroll",
+        "name": "Own payroll",
+        "effect": "allow",
+        "action": "read",
+        "resource_entity_name": "crm_payroll_record",
+        "description": "Payroll linked via user_has_payroll",
+        "path": [
+          {
+            "relationship_name": "user_has_payroll",
+            "direction": "forward",
+            "from_entity_name": "crm_user",
+            "to_entity_name": "crm_payroll_record"
+          }
+        ]
+      }
+    ]
+  }
 }

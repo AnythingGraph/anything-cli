@@ -50,5 +50,30 @@
   "bindings": {
     "postgres": "simple-crm-access.postgres"
   },
-  "default_binding": "simple-crm-access.postgres"
+  "default_binding": "simple-crm-access.postgres",
+  "relationship_access_rules": {
+    "summary": "CRM users read only accounts they own.",
+    "subject_entity_name": "crm_user",
+    "subject_identifier_field": "user_id",
+    "deny_by_default": true,
+    "implementation_status": "enforced",
+    "rules": [
+      {
+        "id": "own_accounts",
+        "name": "Own accounts",
+        "effect": "allow",
+        "action": "read",
+        "resource_entity_name": "crm_account",
+        "description": "Accounts linked via owns_account",
+        "path": [
+          {
+            "relationship_name": "owns_account",
+            "direction": "forward",
+            "from_entity_name": "crm_user",
+            "to_entity_name": "crm_account"
+          }
+        ]
+      }
+    ]
+  }
 }

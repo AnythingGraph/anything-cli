@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState, row_map_to_json};
+use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState, map_row_to_playbook_fields, row_map_to_json};
 use async_trait::async_trait;
 use binding_spec::PlaybookBinding;
 use csv::ReaderBuilder;
@@ -185,6 +185,31 @@ impl DataAdapter for CsvAdapter {
                 })
             }
         }
+    }
+
+    async fn load_entity_rows(
+        &self,
+        entity_name: &str,
+        binding: &PlaybookBinding,
+        context: &ExecContext,
+    ) -> Result<Vec<Value>, AdapterError> {
+        let entity_binding = binding.entities.get(entity_name).ok_or_else(|| {
+            AdapterError::MissingEntityBinding(entity_name.to_string())
+        })?;
+        let file_path = resolve_csv_file_path(context, entity_binding.from.as_deref())?;
+        let physical_rows = load_csv_rows(&file_path)?;
+
+        let mut mapped_rows = Vec::new();
+        for row_value in physical_rows {
+            if let Some(row_object) = row_value.as_object() {
+                let physical_map: HashMap<String, Value> =
+                    row_object.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
+                mapped_rows.push(row_map_to_json(
+                    map_row_to_playbook_fields(physical_map, entity_binding),
+                ));
+            }
+        }
+        Ok(mapped_rows)
     }
 }
 

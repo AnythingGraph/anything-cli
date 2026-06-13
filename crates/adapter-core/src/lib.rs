@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use binding_spec::{PlaybookBinding, SourceProfile};
+use binding_spec::{EntityBinding, PlaybookBinding, SourceProfile};
 use plan_ir::{EntityRef, PlanStep, StepResult};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -42,6 +42,14 @@ pub trait DataAdapter: Send + Sync {
         context: &ExecContext,
         state: &ExecutionState,
     ) -> Result<StepResult, AdapterError>;
+
+    /// Load all rows for one entity (used by ReBAC graph materialization).
+    async fn load_entity_rows(
+        &self,
+        entity_name: &str,
+        binding: &PlaybookBinding,
+        context: &ExecContext,
+    ) -> Result<Vec<Value>, AdapterError>;
 }
 
 pub struct AdapterRegistry {
@@ -109,4 +117,30 @@ pub fn build_exec_context(
 // Convert generic row map into JSON value.
 pub fn row_map_to_json(row: HashMap<String, Value>) -> Value {
     Value::Object(row.into_iter().collect())
+}
+
+// Map a source row (physical column names) to playbook field names.
+pub fn map_row_to_playbook_fields(
+    row: HashMap<String, Value>,
+    entity_binding: &EntityBinding,
+) -> HashMap<String, Value> {
+    let mut mapped = HashMap::new();
+
+    for (playbook_field, physical_column) in &entity_binding.fields {
+        if let Some(value) = row.get(physical_column) {
+            mapped.insert(playbook_field.clone(), value.clone());
+        }
+    }
+
+    if let Some(value) = row.get(&entity_binding.id_field) {
+        mapped.insert(entity_binding.id_field.clone(), value.clone());
+    }
+
+    for (column_name, value) in row {
+        if !mapped.contains_key(&column_name) {
+            mapped.insert(column_name, value);
+        }
+    }
+
+    mapped
 }

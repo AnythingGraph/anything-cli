@@ -19,3 +19,4 @@ plan-compiler = { workspace = true }
 plan-ir = { workspace = true }
 playbook-spec = { workspace = true }
 proof = { workspace = true }
+rebac = { workspace = true }

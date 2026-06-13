@@ -6,6 +6,8 @@ use crate::{EntityBinding, PlaybookBinding, RelationshipBinding};
 
 // Fill missing lookup SQL and relationship operations from declarative metadata.
 pub fn compile_binding_queries(binding: &mut PlaybookBinding) {
+    compile_entity_list_all_queries(binding);
+
     for entity_binding in binding.entities.values_mut() {
         compile_entity_lookups(entity_binding);
     }
@@ -16,6 +18,71 @@ pub fn compile_binding_queries(binding: &mut PlaybookBinding) {
             compile_relationship_operations(&binding.entities, relationship_binding);
         }
     }
+}
+
+// Generate list_all queries for entities (used by ReBAC graph materialization).
+fn compile_entity_list_all_queries(binding: &mut PlaybookBinding) {
+    let object_link_columns: HashMap<String, Vec<String>> =
+        collect_object_link_columns(binding);
+
+    for (entity_name, entity_binding) in binding.entities.iter_mut() {
+        if entity_binding
+            .operations
+            .contains_key("list_all")
+        {
+            continue;
+        }
+
+        let table_name = match entity_binding.from.as_ref() {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => continue,
+        };
+
+        let id_column = entity_binding.id_field.clone();
+        let mut select_columns = build_select_column_list(entity_binding, &id_column);
+
+        if let Some(extra_columns) = object_link_columns.get(entity_name) {
+            for extra_column in extra_columns {
+                if !select_columns.contains(extra_column) {
+                    if select_columns == id_column {
+                        select_columns = format!("{select_columns}, {extra_column}");
+                    } else {
+                        select_columns = format!("{select_columns}, {extra_column}");
+                    }
+                }
+            }
+        }
+
+        entity_binding.operations.insert(
+            "list_all".into(),
+            format!("SELECT {select_columns} FROM {table_name}"),
+        );
+    }
+}
+
+// Map object entities to subject_link_column values for list_all SELECT expansion.
+fn collect_object_link_columns(binding: &PlaybookBinding) -> HashMap<String, Vec<String>> {
+    let mut columns_by_entity: HashMap<String, Vec<String>> = HashMap::new();
+
+    for relationship_binding in binding.relationships.values() {
+        let object_entity_name = match relationship_binding.join.as_ref() {
+            Some(join) => join.to_entity.clone(),
+            None => continue,
+        };
+        let link_column = match relationship_binding.subject_link_column.as_ref() {
+            Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+            _ => continue,
+        };
+
+        let entry = columns_by_entity
+            .entry(object_entity_name)
+            .or_insert_with(Vec::new);
+        if !entry.iter().any(|existing| existing == &link_column) {
+            entry.push(link_column);
+        }
+    }
+
+    columns_by_entity
 }
 
 // Generate entity lookup queries when only table/column metadata is present.
