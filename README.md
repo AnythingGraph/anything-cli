@@ -264,3 +264,5 @@ Reasoning service exposes `/health`, `/playbooks/{id}/context`, `/query`, bindin
 ## License
 
 Apache-2.0
+
+Copyright (C) 2026 — EdwardDeBon, AnythingGraph.
