@@ -6,7 +6,7 @@ Your data stays where it is — Postgres, Salesforce, CSV files, and more. Anyth
 
 No data lake. No ETL project. No copy-paste SQL into chat.
 
-
+https://anythinggraph.com/anythinggraphcli.png
 
 ## What you get
 
