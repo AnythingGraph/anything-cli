@@ -1,0 +1,40 @@
+{
+  "id": "cross-source-identity-audit",
+  "name": "Cross-source identity audit",
+  "description": "Align CRM users in warehouse_pg with payroll identities in payroll_csv. Find orphans and linked identities by user_id.",
+  "entities": {
+    "crm_user": {
+      "id": "user_id",
+      "fields": [
+        "full_name"
+      ]
+    },
+    "payroll_user": {
+      "id": "user_id",
+      "fields": [
+        "full_name"
+      ]
+    }
+  },
+  "relationships": {
+    "same_person": {
+      "from": "crm_user",
+      "to": "payroll_user"
+    }
+  },
+  "sources": {
+    "crm_user": "postgres",
+    "payroll_user": "csv"
+  },
+  "access": {
+    "summary": "Auditors match CRM users to payroll identities by user_id.",
+    "subject": "crm_user",
+    "subject_id": "user_id",
+    "allow": [
+      {
+        "relationship": "same_person",
+        "resource": "payroll_user"
+      }
+    ]
+  }
+}

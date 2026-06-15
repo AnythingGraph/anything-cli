@@ -1,33 +1,17 @@
-adapter: sql
-version: 1
-playbook_id: simple-crm-access
 source_id: warehouse_pg
+
 entities:
-  crm_account:
-    from: accounts
-    id_field: account_name
-    fields:
-      industry: industry
-      account_name: account_name
-    lookup:
-      by_identifier: SELECT account_name, industry FROM accounts WHERE account_name = :identifier LIMIT 1
-      by_name: SELECT account_name, industry FROM accounts WHERE account_name ILIKE :name LIMIT 1
   crm_user:
     from: users
-    id_field: user_id
-    fields:
-      user_id: user_id
-      full_name: full_name
-    lookup:
-      by_name: SELECT user_id, full_name FROM users WHERE full_name ILIKE :name LIMIT 1
-      by_identifier: SELECT user_id, full_name FROM users WHERE user_id = :identifier LIMIT 1
+    id: user_id
+    fields: [full_name]
+
+  crm_account:
+    from: accounts
+    id: account_name
+    fields: [industry]
+
 relationships:
   owns_account:
-    join:
-      from_entity: crm_user
-      to_entity: crm_account
-      on: accounts.owner_user_id = users.user_id
-    subject_link_column: owner_user_id
-    operations:
-      count_for_subject: SELECT COUNT(*)::bigint AS count FROM accounts WHERE owner_user_id = :subject_id
-      list_for_subject: SELECT account_name, industry FROM accounts WHERE owner_user_id = :subject_id LIMIT :limit
+    object: crm_account
+    link_column: owner_user_id

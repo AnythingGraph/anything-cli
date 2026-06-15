@@ -1,0 +1,59 @@
+{
+  "id": "sales-compensation-access",
+  "name": "Sales compensation access",
+  "description": "Federated sales roster in Postgres (warehouse_pg) plus payroll history in CSV (payroll_csv). Reps see owned accounts and their pay records.",
+  "entities": {
+    "crm_user": {
+      "id": "user_id",
+      "fields": [
+        "full_name"
+      ]
+    },
+    "crm_account": {
+      "id": "account_name",
+      "fields": [
+        "industry"
+      ]
+    },
+    "payroll_record": {
+      "id": "payroll_id",
+      "fields": [
+        "user_id",
+        "pay_period",
+        "gross_pay",
+        "currency",
+        "pay_date"
+      ]
+    }
+  },
+  "relationships": {
+    "owns_account": {
+      "from": "crm_user",
+      "to": "crm_account"
+    },
+    "received_payroll": {
+      "from": "crm_user",
+      "to": "payroll_record"
+    }
+  },
+  "sources": {
+    "crm_user": "postgres",
+    "crm_account": "postgres",
+    "payroll_record": "csv"
+  },
+  "access": {
+    "summary": "CRM users read accounts they own and their own payroll records.",
+    "subject": "crm_user",
+    "subject_id": "user_id",
+    "allow": [
+      {
+        "relationship": "owns_account",
+        "resource": "crm_account"
+      },
+      {
+        "relationship": "received_payroll",
+        "resource": "payroll_record"
+      }
+    ]
+  }
+}

@@ -13,17 +13,18 @@ use adapter_sql::{
 };
 use anyhow::{anyhow, Context, Result};
 use binding_spec::{
-    compile_binding_queries, load_binding_from_path, load_binding_from_yaml, load_profile_from_path,
-    playbook_binding_path, playbook_binding_stem, save_binding_to_path,
-    suggest_entity_table_mappings, validate_binding_for_playbook, BindingValidationReport,
-    PlaybookBinding, SourceProfile,
+    finalize_binding, load_binding_from_path, load_binding_from_yaml, load_profile_from_path,
+    playbook_binding_path, playbook_binding_stem, playbook_id_from_binding_stem,
+    save_binding_authoring_yaml_to_path, suggest_entity_table_mappings, validate_binding_for_playbook,
+    BindingValidationReport, PlaybookBinding, SourceProfile,
 };
 use serde::{Deserialize, Serialize};
 use plan_compiler::compile_query_request;
 use plan_ir::{Plan, QueryRequest};
 use playbook_spec::{
     discover_playbooks_in_directory, load_playbook_from_path, playbook_context_summary,
-    resolve_binding_name_for_entity, PlaybookContextSummary, PlaybookDefinition,
+    propose_playbook_document, resolve_binding_name_for_entity, save_playbook_document,
+    PlaybookContextSummary, PlaybookDefinition,
 };
 use proof::ProofEnvelope;
 use tokio::sync::RwLock;
@@ -91,25 +92,6 @@ impl ReasoningRuntime {
             playbooks.insert(playbook.id.clone(), playbook);
         }
 
-        let mut bindings = HashMap::new();
-        if self.config.bindings_dir.exists() {
-            for entry in std::fs::read_dir(&self.config.bindings_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) == Some("yaml")
-                    || path.extension().and_then(|ext| ext.to_str()) == Some("yml")
-                {
-                    let binding = load_binding_from_path(&path)?;
-                    let binding_name = path
-                        .file_stem()
-                        .and_then(|value| value.to_str())
-                        .unwrap_or("binding")
-                        .to_string();
-                    bindings.insert(binding_name, binding);
-                }
-            }
-        }
-
         let mut profile = if let Some(profile_path) = self.config.profile_path.as_ref() {
             load_profile_from_path(profile_path)?
         } else {
@@ -118,6 +100,38 @@ impl ReasoningRuntime {
             }
         };
         resolve_profile_env_refs(&mut profile);
+
+        let mut bindings = HashMap::new();
+        if self.config.bindings_dir.exists() {
+            for entry in std::fs::read_dir(&self.config.bindings_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().and_then(|ext| ext.to_str()) == Some("yaml")
+                    || path.extension().and_then(|ext| ext.to_str()) == Some("yml")
+                {
+                    let binding_name = path
+                        .file_stem()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("binding")
+                        .to_string();
+                    let mut binding = load_binding_from_path(&path)?;
+                    let playbook_id = binding
+                        .playbook_id
+                        .clone()
+                        .or_else(|| playbook_id_from_binding_stem(&binding_name));
+                    let playbook = playbook_id
+                        .as_ref()
+                        .and_then(|playbook_id| playbooks.get(playbook_id));
+                    finalize_binding(
+                        &mut binding,
+                        Some(&profile),
+                        &binding_name,
+                        playbook,
+                    );
+                    bindings.insert(binding_name, binding);
+                }
+            }
+        }
 
         *self.playbooks.write().await = playbooks;
         *self.bindings.write().await = bindings;
@@ -489,23 +503,28 @@ impl ReasoningRuntime {
             .get(playbook_id)
             .ok_or_else(|| anyhow!("playbook not found: {playbook_id}"))?;
 
+        let profile = self.profile.read().await;
         let mut binding = load_binding_from_yaml(binding_yaml)
             .map_err(|error| anyhow!("invalid binding yaml: {error}"))?;
         if binding.playbook_id.is_none() {
             binding.playbook_id = Some(playbook_id.to_string());
         }
-        compile_binding_queries(&mut binding);
+        let binding_stem = default_binding_name_for_playbook(playbook, &binding);
+        finalize_binding(
+            &mut binding,
+            Some(&*profile),
+            &binding_stem,
+            Some(playbook),
+        );
 
         let validation = validate_binding_for_playbook(playbook, &binding);
-        let compiled_yaml = binding_spec::binding_to_yaml(&binding)
-            .map_err(|error| anyhow!("serialize binding failed: {error}"))?;
 
         Ok(ProposeBindingResponse {
             playbook_id: playbook_id.to_string(),
             binding_name: default_binding_name_for_playbook(playbook, &binding),
             validation,
-            compiled_binding_yaml: compiled_yaml,
-            binding,
+            save_instruction: BINDING_SAVE_INSTRUCTION.to_string(),
+            debug_compiled_binding_yaml: debug_compiled_binding_yaml(&binding),
         })
     }
 
@@ -516,6 +535,7 @@ impl ReasoningRuntime {
             .get(&request.playbook_id)
             .ok_or_else(|| anyhow!("playbook not found: {}", request.playbook_id))?;
 
+        let profile = self.profile.read().await;
         let mut binding = if let Some(binding_yaml) = request.binding_yaml.as_ref() {
             load_binding_from_yaml(binding_yaml)
                 .map_err(|error| anyhow!("invalid binding yaml: {error}"))?
@@ -525,7 +545,16 @@ impl ReasoningRuntime {
             return Err(anyhow!("test_binding requires binding_yaml or binding_name"));
         };
 
-        compile_binding_queries(&mut binding);
+        let binding_stem = request
+            .binding_name
+            .clone()
+            .unwrap_or_else(|| default_binding_name_for_playbook(playbook, &binding));
+        finalize_binding(
+            &mut binding,
+            Some(&*profile),
+            &binding_stem,
+            Some(playbook),
+        );
         let validation = validate_binding_for_playbook(playbook, &binding);
 
         let query_request = request.sample_query.clone().unwrap_or_else(|| QueryRequest {
@@ -582,10 +611,17 @@ impl ReasoningRuntime {
             .get(playbook_id)
             .ok_or_else(|| anyhow!("playbook not found: {playbook_id}"))?;
 
+        let profile = self.profile.read().await;
         let mut binding = load_binding_from_yaml(binding_yaml)
             .map_err(|error| anyhow!("invalid binding yaml: {error}"))?;
         binding.playbook_id = Some(playbook_id.to_string());
-        compile_binding_queries(&mut binding);
+        let binding_stem = playbook_binding_stem(playbook_id, adapter_suffix);
+        finalize_binding(
+            &mut binding,
+            Some(&*profile),
+            &binding_stem,
+            Some(playbook),
+        );
 
         let validation = validate_binding_for_playbook(playbook, &binding);
         if !validation.valid {
@@ -597,7 +633,7 @@ impl ReasoningRuntime {
 
         let binding_stem = playbook_binding_stem(playbook_id, adapter_suffix);
         let binding_path = playbook_binding_path(&self.config.bindings_dir, playbook_id, adapter_suffix);
-        save_binding_to_path(&binding_path, &binding)
+        save_binding_authoring_yaml_to_path(&binding_path, binding_yaml)
             .map_err(|error| anyhow!("save binding failed: {error}"))?;
 
         drop(playbooks);
@@ -608,6 +644,50 @@ impl ReasoningRuntime {
             binding_name: binding_stem,
             binding_path: binding_path.to_string_lossy().to_string(),
             validation,
+        })
+    }
+
+    // Validate proposed playbook JSON without saving.
+    pub async fn propose_playbook(
+        &self,
+        playbook_id: &str,
+        playbook_json: &str,
+    ) -> Result<ProposePlaybookResponse> {
+        let (playbook, formatted_json) = propose_playbook_document(playbook_json, playbook_id)
+            .map_err(|error| anyhow!("invalid playbook json: {error}"))?;
+
+        Ok(ProposePlaybookResponse {
+            playbook_id: playbook.id.clone(),
+            validation: PlaybookValidationReport {
+                valid: true,
+                errors: Vec::new(),
+            },
+            formatted_playbook_json: formatted_json,
+            context: playbook_context_summary(&playbook),
+            save_instruction: PLAYBOOK_SAVE_INSTRUCTION.to_string(),
+        })
+    }
+
+    // Save validated playbook JSON to playbooks/{id}.json and reload catalog.
+    pub async fn save_playbook(
+        &self,
+        playbook_id: &str,
+        playbook_json: &str,
+    ) -> Result<SavePlaybookResponse> {
+        let (playbook_path, playbook) =
+            save_playbook_document(&self.config.playbooks_dir, playbook_id, playbook_json)
+                .map_err(|error| anyhow!("save playbook failed: {error}"))?;
+
+        self.reload_catalog().await?;
+
+        Ok(SavePlaybookResponse {
+            playbook_id: playbook.id.clone(),
+            playbook_path: playbook_path.to_string_lossy().to_string(),
+            validation: PlaybookValidationReport {
+                valid: true,
+                errors: Vec::new(),
+            },
+            context: playbook_context_summary(&playbook),
         })
     }
 
@@ -704,8 +784,18 @@ pub struct ProposeBindingResponse {
     pub playbook_id: String,
     pub binding_name: String,
     pub validation: BindingValidationReport,
-    pub compiled_binding_yaml: String,
-    pub binding: PlaybookBinding,
+    pub save_instruction: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_compiled_binding_yaml: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProposePlaybookResponse {
+    pub playbook_id: String,
+    pub validation: PlaybookValidationReport,
+    pub formatted_playbook_json: String,
+    pub context: PlaybookContextSummary,
+    pub save_instruction: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -735,6 +825,20 @@ pub struct SaveBindingResponse {
     pub binding_name: String,
     pub binding_path: String,
     pub validation: BindingValidationReport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaybookValidationReport {
+    pub valid: bool,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavePlaybookResponse {
+    pub playbook_id: String,
+    pub playbook_path: String,
+    pub validation: PlaybookValidationReport,
+    pub context: PlaybookContextSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -901,4 +1005,19 @@ pub fn default_paths_from_workspace(workspace_root: &Path) -> RuntimeConfig {
         bindings_dir: workspace_root.join("bindings"),
         profile_path: Some(workspace_root.join("profiles").join("local.yaml")),
     }
+}
+
+const BINDING_SAVE_INSTRUCTION: &str = "Save the same declarative binding YAML you passed to propose_binding via save_binding. The file on disk will match your submitted YAML (compact format: source_id, entities.from/id/fields, relationships.object/link_column). Do NOT add lookup/operations/join/SQL blocks.";
+
+const PLAYBOOK_SAVE_INSTRUCTION: &str = "Save the same compact playbook JSON you authored via save_playbook. Use entities/relationships/sources maps (see AGENTS.md). formatted_playbook_json is a preview only.";
+
+// Include compiled binding YAML in propose_binding responses only when debugging.
+fn debug_compiled_binding_yaml(binding: &PlaybookBinding) -> Option<String> {
+    let include_debug = std::env::var("AG_DEBUG_COMPILED")
+        .ok()
+        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
+    if !include_debug {
+        return None;
+    }
+    binding_spec::binding_to_yaml(binding).ok()
 }

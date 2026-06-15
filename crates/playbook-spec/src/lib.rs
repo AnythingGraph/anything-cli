@@ -4,6 +4,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+mod normalize;
+
+use normalize::normalize_playbook_document;
+
 #[derive(Debug, Error)]
 pub enum PlaybookError {
     #[error("io error: {0}")]
@@ -75,14 +79,14 @@ pub struct PlaybookSummary {
 // Load one playbook JSON file from disk.
 pub fn load_playbook_from_path(playbook_path: &Path) -> Result<PlaybookDefinition, PlaybookError> {
     let raw_text = fs::read_to_string(playbook_path)?;
-    let mut playbook: PlaybookDefinition = serde_json::from_str(&raw_text)?;
+    let fallback_id = playbook_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("playbook")
+        .to_string();
+    let mut playbook = normalize_playbook_document(&raw_text, &fallback_id)?;
     validate_playbook(&playbook)?;
     if playbook.id.trim().is_empty() {
-        let fallback_id = playbook_path
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or("playbook")
-            .to_string();
         playbook.id = fallback_id;
     }
     Ok(playbook)
@@ -99,6 +103,46 @@ pub fn validate_playbook(playbook: &PlaybookDefinition) -> Result<(), PlaybookEr
         ));
     }
     Ok(())
+}
+
+// Validate playbook JSON text without writing to disk.
+pub fn propose_playbook_document(
+    raw_text: &str,
+    fallback_id: &str,
+) -> Result<(PlaybookDefinition, String), PlaybookError> {
+    let playbook = normalize_playbook_document(raw_text, fallback_id)?;
+    validate_playbook(&playbook)?;
+    let formatted_json = format_playbook_json(raw_text)?;
+    Ok((playbook, formatted_json))
+}
+
+// Save validated playbook JSON to playbooks/{id}.json.
+pub fn save_playbook_document(
+    playbooks_dir: &Path,
+    expected_playbook_id: &str,
+    raw_text: &str,
+) -> Result<(PathBuf, PlaybookDefinition), PlaybookError> {
+    let (playbook, formatted_json) = propose_playbook_document(raw_text, expected_playbook_id)?;
+    if playbook.id != expected_playbook_id {
+        return Err(PlaybookError::Validation(format!(
+            "playbook id '{}' does not match path id '{}'",
+            playbook.id, expected_playbook_id
+        )));
+    }
+
+    if !playbooks_dir.exists() {
+        fs::create_dir_all(playbooks_dir)?;
+    }
+
+    let playbook_path = playbooks_dir.join(format!("{}.json", playbook.id));
+    fs::write(&playbook_path, formatted_json)?;
+    Ok((playbook_path, playbook))
+}
+
+// Pretty-print playbook JSON after parse validation.
+fn format_playbook_json(raw_text: &str) -> Result<String, PlaybookError> {
+    let value: serde_json::Value = serde_json::from_str(raw_text)?;
+    serde_json::to_string_pretty(&value).map_err(PlaybookError::from)
 }
 
 // Discover playbook JSON files in a directory (non-recursive).
@@ -156,7 +200,6 @@ pub fn playbook_context_summary(playbook: &PlaybookDefinition) -> PlaybookContex
                 object_entity_name: relationship.object_entity_name.clone(),
             })
             .collect(),
-        field_mappings: playbook.field_mappings.clone(),
         entity_sources: playbook.entity_sources.clone(),
         bindings: playbook.bindings.clone(),
         default_binding: playbook.default_binding.clone(),
@@ -200,8 +243,6 @@ pub struct PlaybookContextSummary {
     pub description: String,
     pub entities: Vec<PlaybookEntitySummary>,
     pub relationships: Vec<PlaybookRelationshipSummary>,
-    #[serde(default)]
-    pub field_mappings: Option<std::collections::HashMap<String, std::collections::HashMap<String, std::collections::HashMap<String, String>>>>,
     #[serde(default)]
     pub entity_sources: Option<std::collections::HashMap<String, String>>,
     #[serde(default)]

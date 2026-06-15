@@ -8,13 +8,13 @@ entities:
       user_id: user
       full_name: full_name
 
-  crm_payroll_record:
+  payroll_record:
     from: payroll.csv
     id: payroll_id
     fields:
       user_id: user
 
 relationships:
-  user_has_payroll:
-    object: crm_payroll_record
+  received_payroll:
+    object: payroll_record
     link_column: user

@@ -3,6 +3,12 @@ import type { Request, Response } from 'express';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  extractBearerToken,
+  getDefaultAuthToken,
+  isAuthRequired,
+  resolveRoleFromToken,
+} from './auth.js';
 import { createThinMcpServer } from './serverCore.js';
 
 const transportsBySessionId = new Map<string, StreamableHTTPServerTransport>();
@@ -20,9 +26,33 @@ function getHttpPath(): string {
   return process.env.AG_MCP_PATH?.trim() || '/mcp';
 }
 
+// Resolve bearer token from MCP HTTP request or server default env token.
+function resolveRequestAuthToken(request: Request): string | undefined {
+  const headerToken = extractBearerToken(request.headers.authorization);
+  if (headerToken) {
+    return headerToken;
+  }
+
+  return getDefaultAuthToken();
+}
+
 async function handleMcpPost(request: Request, response: Response): Promise<void> {
   const sessionIdHeader = request.headers['mcp-session-id'];
   const sessionId = typeof sessionIdHeader === 'string' ? sessionIdHeader : undefined;
+  const authToken = resolveRequestAuthToken(request);
+  const role = resolveRoleFromToken(authToken);
+
+  if (isAuthRequired() && !role) {
+    response.status(401).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32001,
+        message: 'Unauthorized: provide Authorization: Bearer <token> (AG_ADMIN_TOKENS or AG_USER_TOKENS)',
+      },
+      id: null,
+    });
+    return;
+  }
 
   try {
     let transport: StreamableHTTPServerTransport | undefined;
@@ -46,7 +76,10 @@ async function handleMcpPost(request: Request, response: Response): Promise<void
         }
       };
 
-      const server = createThinMcpServer();
+      const server = createThinMcpServer({
+        role: role || 'admin',
+        authToken,
+      });
       await server.connect(transport);
       await transport.handleRequest(request, response, request.body);
       return;
@@ -97,6 +130,11 @@ async function main() {
   const port = getHttpPort();
   app.listen(port, host, () => {
     console.error(`[anythinggraph-thin-mcp-http] listening on http://${host}:${port}${mcpPath}`);
+    if (isAuthRequired()) {
+      console.error('[anythinggraph-thin-mcp-http] auth enabled — clients must send Authorization: Bearer token');
+    } else {
+      console.error('[anythinggraph-thin-mcp-http] auth disabled — set AG_ADMIN_TOKENS / AG_USER_TOKENS for production');
+    }
   });
 }
 

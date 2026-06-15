@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1280" role="img" aria-labelledby="title desc">
+  <title id="title">Anything CLI playbook structure with minimal examples</title>
+  <desc id="desc">crm-payroll-access playbook routes CRM entities to postgres binding and payroll to csv binding, via profile credentials.</desc>
+
+  <defs>
+    <linearGradient id="agentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9775fa"/>
+      <stop offset="100%" stop-color="#ff6b4a"/>
+    </linearGradient>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#1a1625" flood-opacity="0.1"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#5c5470"/>
+    </marker>
+  </defs>
+
+  <rect width="980" height="1280" fill="#faf8f5"/>
+
+  <!-- Agent -->
+  <g filter="url(#shadow)">
+    <rect x="320" y="20" width="340" height="56" rx="14" fill="url(#agentGrad)"/>
+    <text x="490" y="54" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="18" font-weight="700">AI agent (MCP)</text>
+  </g>
+  <text x="490" y="96" text-anchor="middle" fill="#5c5470" font-family="system-ui, sans-serif" font-size="15">"How many accounts does Alex own?"</text>
+  <line x1="490" y1="106" x2="490" y2="132" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Playbook -->
+  <g filter="url(#shadow)">
+    <rect x="30" y="140" width="920" height="240" rx="16" fill="#ffffff" stroke="#9775fa" stroke-width="2"/>
+    <text x="52" y="172" fill="#9775fa" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="0.06em">PLAYBOOK</text>
+    <text x="52" y="200" fill="#1a1625" font-family="monospace" font-size="17" font-weight="700">playbooks/crm-payroll-access.json</text>
+    <text x="52" y="230" fill="#5c5470" font-family="monospace" font-size="14">{</text>
+    <text x="72" y="254" fill="#5c5470" font-family="monospace" font-size="14">"entities": { "crm_user": { "id": "user_id" }, "crm_account": { ... }, "crm_payroll_record": { ... } },</text>
+    <text x="72" y="278" fill="#5c5470" font-family="monospace" font-size="14">"relationships": { "owns_account": { "from": "crm_user", "to": "crm_account" }, ... },</text>
+    <text x="72" y="302" fill="#1a1625" font-family="monospace" font-size="14" font-weight="600">"sources": {</text>
+    <text x="92" y="326" fill="#9775fa" font-family="monospace" font-size="14">"crm_user": "postgres",  "crm_account": "postgres",  "crm_payroll_record": "csv"</text>
+    <text x="72" y="350" fill="#1a1625" font-family="monospace" font-size="14" font-weight="600">}</text>
+    <text x="52" y="372" fill="#5c5470" font-family="system-ui, sans-serif" font-size="14">Source keys postgres and csv pick the binding files below</text>
+  </g>
+
+  <line x1="320" y1="380" x2="220" y2="420" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="660" y1="380" x2="760" y2="420" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="490" y="406" text-anchor="middle" fill="#5c5470" font-family="system-ui, sans-serif" font-size="14">one binding file per source key (postgres + csv)</text>
+
+  <!-- Postgres binding -->
+  <g filter="url(#shadow)">
+    <rect x="30" y="428" width="455" height="268" rx="16" fill="#ebfbee" stroke="#2b8a3e" stroke-width="2"/>
+    <text x="52" y="460" fill="#2b8a3e" font-family="system-ui, sans-serif" font-size="14" font-weight="700">BINDING (postgres source key)</text>
+    <text x="52" y="488" fill="#1a1625" font-family="monospace" font-size="16" font-weight="700">bindings/crm-payroll-access.postgres.yaml</text>
+    <text x="52" y="518" fill="#5c5470" font-family="monospace" font-size="13">source_id: warehouse_pg</text>
+    <text x="52" y="544" fill="#5c5470" font-family="monospace" font-size="13">entities:</text>
+    <text x="72" y="570" fill="#5c5470" font-family="monospace" font-size="13">crm_user:    from: users     id: user_id</text>
+    <text x="72" y="596" fill="#5c5470" font-family="monospace" font-size="13">crm_account: from: accounts  id: account_name</text>
+    <text x="52" y="624" fill="#5c5470" font-family="monospace" font-size="13">relationships:</text>
+    <text x="72" y="650" fill="#5c5470" font-family="monospace" font-size="13">owns_account: object: crm_account</text>
+    <text x="72" y="674" fill="#5c5470" font-family="monospace" font-size="13">link_column: owner_user_id</text>
+    <text x="52" y="700" fill="#5c5470" font-family="system-ui, sans-serif" font-size="13">Maps playbook names to Postgres tables</text>
+  </g>
+
+  <!-- CSV binding -->
+  <g filter="url(#shadow)">
+    <rect x="495" y="428" width="455" height="268" rx="16" fill="#ebfbee" stroke="#2b8a3e" stroke-width="2"/>
+    <text x="517" y="460" fill="#2b8a3e" font-family="system-ui, sans-serif" font-size="14" font-weight="700">BINDING (csv source key)</text>
+    <text x="517" y="488" fill="#1a1625" font-family="monospace" font-size="16" font-weight="700">bindings/crm-payroll-access.csv.yaml</text>
+    <text x="517" y="518" fill="#5c5470" font-family="monospace" font-size="13">source_id: payroll_csv</text>
+    <text x="517" y="544" fill="#5c5470" font-family="monospace" font-size="13">entities:</text>
+    <text x="537" y="570" fill="#5c5470" font-family="monospace" font-size="13">crm_payroll_record: from: payroll.csv</text>
+    <text x="537" y="596" fill="#5c5470" font-family="monospace" font-size="13">id: payroll_id</text>
+    <text x="537" y="622" fill="#5c5470" font-family="monospace" font-size="13">fields: user_id: user  (CSV column "user")</text>
+    <text x="517" y="650" fill="#5c5470" font-family="monospace" font-size="13">relationships:</text>
+    <text x="537" y="676" fill="#5c5470" font-family="monospace" font-size="13">user_has_payroll: object: crm_payroll_record</text>
+    <text x="537" y="700" fill="#5c5470" font-family="monospace" font-size="13">link_column: user</text>
+  </g>
+
+  <line x1="260" y1="696" x2="380" y2="736" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="720" y1="696" x2="600" y2="736" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Profile -->
+  <g filter="url(#shadow)">
+    <rect x="120" y="744" width="740" height="180" rx="16" fill="#e7f5ff" stroke="#4dabf7" stroke-width="2"/>
+    <text x="142" y="776" fill="#4dabf7" font-family="system-ui, sans-serif" font-size="14" font-weight="700">PROFILE (credentials)</text>
+    <text x="142" y="804" fill="#1a1625" font-family="monospace" font-size="16" font-weight="700">profiles/local.yaml</text>
+    <text x="142" y="834" fill="#5c5470" font-family="monospace" font-size="13">sources:</text>
+    <text x="162" y="860" fill="#5c5470" font-family="monospace" font-size="13">warehouse_pg:  adapter: sql   dsn: env:AG_SQL_DSN</text>
+    <text x="162" y="886" fill="#5c5470" font-family="monospace" font-size="13">payroll_csv:   adapter: csv   file_path: env:AG_PAYROLL_CSV_PATH</text>
+    <text x="142" y="912" fill="#5c5470" font-family="system-ui, sans-serif" font-size="13">Bindings point here with source_id - secrets stay out of git</text>
+  </g>
+
+  <line x1="320" y1="924" x2="260" y2="964" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="660" y1="924" x2="720" y2="964" stroke="#5c5470" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Live systems -->
+  <g filter="url(#shadow)">
+    <rect x="70" y="972" width="400" height="88" rx="12" fill="#ffffff" stroke="#d8d3e0" stroke-width="1"/>
+    <text x="270" y="1004" text-anchor="middle" fill="#1a1625" font-family="system-ui, sans-serif" font-size="16" font-weight="700">Live Postgres</text>
+    <text x="270" y="1032" text-anchor="middle" fill="#5c5470" font-family="monospace" font-size="13">users, accounts tables - data never copied</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="510" y="972" width="400" height="88" rx="12" fill="#ffffff" stroke="#d8d3e0" stroke-width="1"/>
+    <text x="710" y="1004" text-anchor="middle" fill="#1a1625" font-family="system-ui, sans-serif" font-size="16" font-weight="700">Live CSV file</text>
+    <text x="710" y="1032" text-anchor="middle" fill="#5c5470" font-family="monospace" font-size="13">data/payroll.csv - queried in place</text>
+  </g>
+
+  <text x="490" y="1100" text-anchor="middle" fill="#5c5470" font-family="system-ui, sans-serif" font-size="15">
+    File layout: playbook JSON + one binding YAML per source key + profile YAML
+  </text>
+</svg>

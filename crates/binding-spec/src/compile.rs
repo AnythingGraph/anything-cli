@@ -146,6 +146,9 @@ fn format_name_lookup(
         "mssql" => format!(
             "SELECT TOP 1 {select_columns} FROM {table_name} WHERE LOWER({name_column}) = LOWER(:name)"
         ),
+        "soql" => format!(
+            "SELECT {select_columns} FROM {table_name} WHERE {name_column} = :name LIMIT 1"
+        ),
         _ => format!(
             "SELECT {select_columns} FROM {table_name} WHERE {name_column} ILIKE :name LIMIT 1"
         ),
@@ -162,6 +165,9 @@ fn format_identifier_lookup(
     match adapter_type {
         "mssql" => format!(
             "SELECT TOP 1 {select_columns} FROM {table_name} WHERE {id_column} = :identifier"
+        ),
+        "soql" => format!(
+            "SELECT {select_columns} FROM {table_name} WHERE {id_column} = :identifier LIMIT 1"
         ),
         _ => format!(
             "SELECT {select_columns} FROM {table_name} WHERE {id_column} = :identifier LIMIT 1"
@@ -236,6 +242,9 @@ fn format_count_for_subject(adapter_type: &str, object_table: &str, subject_link
         "mssql" => format!(
             "SELECT COUNT(*) AS count FROM {object_table} WHERE {subject_link_column} = :subject_id"
         ),
+        "soql" => format!(
+            "SELECT COUNT() FROM {object_table} WHERE {subject_link_column} = :subject_id"
+        ),
         _ => format!(
             "SELECT COUNT(*)::bigint AS count FROM {object_table} WHERE {subject_link_column} = :subject_id"
         ),
@@ -252,6 +261,9 @@ fn format_list_for_subject(
     match adapter_type {
         "mssql" => format!(
             "SELECT TOP (:limit) {list_columns} FROM {object_table} WHERE {subject_link_column} = :subject_id"
+        ),
+        "soql" => format!(
+            "SELECT {list_columns} FROM {object_table} WHERE {subject_link_column} = :subject_id LIMIT :limit"
         ),
         _ => format!(
             "SELECT {list_columns} FROM {object_table} WHERE {subject_link_column} = :subject_id LIMIT :limit"
@@ -474,6 +486,12 @@ pub fn validate_binding_for_playbook(
     playbook: &PlaybookDefinition,
     binding: &PlaybookBinding,
 ) -> BindingValidationReport {
+    let mut compiled_binding = binding.clone();
+    crate::normalize_relationship_bindings(&mut compiled_binding);
+    crate::merge_entity_fields_from_playbook(&mut compiled_binding, playbook);
+    compile_binding_queries(&mut compiled_binding);
+
+    let binding = &compiled_binding;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
@@ -529,7 +547,11 @@ pub fn validate_binding_for_playbook(
     }
 
     if binding.adapter.trim().is_empty() {
-        errors.push("binding adapter is required".into());
+        warnings.push("binding adapter is not set; infer from profile or file stem before execute".into());
+    }
+
+    for read_only_error in crate::read_only::validate_read_only_binding_queries(binding) {
+        errors.push(read_only_error);
     }
 
     BindingValidationReport {

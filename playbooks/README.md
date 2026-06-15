@@ -16,193 +16,176 @@ Sample playbooks for AnythingGraph CLI. Setup and MCP usage: **[main README](../
 
 ## How to write a playbook and bindings
 
-A **playbook** (`playbooks/<id>.json`) is your business vocabulary and routing rules. **Bindings** (`../bindings/<playbook_id>.<source>.yaml`) map that vocabulary to real tables or files. Credentials live in `../profiles/local.yaml`.
+A **playbook** (`playbooks/<id>.json`) is your business vocabulary, routing, and access rules. **Bindings** (`../bindings/<playbook_id>.<source>.yaml`) map that vocabulary to real tables or files. Credentials live in `../profiles/local.yaml`.
 
-Working example in this folder: `crm-payroll-access.json` with `../bindings/crm-payroll-access.postgres.yaml` and `../bindings/crm-payroll-access.csv.yaml`.
+Working example: `crm-payroll-access.json` with `../bindings/crm-payroll-access.postgres.yaml` and `../bindings/crm-payroll-access.csv.yaml`.
 
-### 1. Playbook JSON — what you model
+**Structure diagram:** [playbook-structure.svg](../docs/playbook-structure.svg) · [playbook-structure.md](../docs/playbook-structure.md) (includes Mermaid for GitHub).
+
+### How the pieces connect
+
+```mermaid
+flowchart TB
+  Agent["AI agent (MCP)"]
+  Playbook["playbooks/crm-payroll-access.json\nentities · relationships · access\nsources: crm_user → postgres · crm_payroll_record → csv"]
+  B1["bindings/crm-payroll-access.postgres.yaml"]
+  B2["bindings/crm-payroll-access.csv.yaml"]
+  Profile["profiles/local.yaml"]
+  S1["Live Postgres"]
+  S2["Live CSV"]
+
+  Agent -->|"query in playbook terms"| Playbook
+  Playbook -->|"source key postgres"| B1
+  Playbook -->|"source key csv"| B2
+  B1 --> Profile
+  B2 --> Profile
+  Profile --> S1
+  Profile --> S2
+```
+
+For playbook **`crm-payroll-access`** with source keys **`postgres`** and **`csv`**, you typically author:
+
+1. `playbooks/crm-payroll-access.json`
+2. `bindings/crm-payroll-access.postgres.yaml` — all entities routed to `postgres` (`crm_user`, `crm_account`)
+3. `bindings/crm-payroll-access.csv.yaml` — all entities routed to `csv` (`crm_payroll_record`)
+4. `profiles/local.yaml` — credentials each binding references via `source_id`
+
+### 1. Playbook JSON — compact format
 
 | Block | Purpose |
 |-------|---------|
-| `id`, `name`, `description` | Playbook identity |
-| `entities[]` | Things in your domain (`crm_user`, `crm_account`, …) and their fields |
-| `entity_relationships[]` | How entities connect (`owns_account`: user → account) |
-| `entity_sources` | Which source key each entity lives on (`postgres`, `csv`, …) |
-| `bindings` | Maps source keys → binding file stems (no `.yaml`) |
-| `relationship_access_rules` | Optional ReBAC; set `"active": true` to enforce at runtime |
+| `id`, `name`, `description` | Playbook identity (`name` defaults from `id` if omitted) |
+| `entities` | Map of entity name → `{ "id": "<identifier field>", "fields": [...] }` |
+| `relationships` | Map of relationship name → `{ "from", "to" }` entity names |
+| `sources` | Map of entity name → source key (`postgres`, `csv`, `salesforce`, …) |
+| `access` | Optional ReBAC — subject + allow rules (expanded to full rules at load time) |
 
-Minimal shape (CRM + payroll across Postgres and CSV):
+Binding file stems are inferred automatically: source key `postgres` on playbook `crm-payroll-access` → `crm-payroll-access.postgres.yaml`.
 
 ```json
 {
   "id": "crm-payroll-access",
   "name": "CRM + payroll access",
-  "description": "Users, accounts in Postgres; payroll in CSV.",
-  "entities": [
-    {
-      "name": "crm_user",
-      "display_name": "CRM user",
-      "fields": [
-        { "field_name": "user_id", "field_type": "TEXT", "is_identifier": true },
-        { "field_name": "full_name", "field_type": "TEXT" }
-      ]
-    },
-    {
-      "name": "crm_account",
-      "display_name": "Account",
-      "fields": [
-        { "field_name": "account_name", "field_type": "TEXT", "is_identifier": true },
-        { "field_name": "industry", "field_type": "TEXT" }
-      ]
-    },
-    {
-      "name": "crm_payroll_record",
-      "display_name": "Payroll record",
-      "fields": [
-        { "field_name": "payroll_id", "field_type": "TEXT", "is_identifier": true },
-        { "field_name": "user_id", "field_type": "TEXT" }
-      ]
+  "description": "Users and accounts in Postgres; payroll in CSV.",
+  "entities": {
+    "crm_user": { "id": "user_id", "fields": ["full_name"] },
+    "crm_account": { "id": "account_name", "fields": ["industry"] },
+    "crm_payroll_record": {
+      "id": "payroll_id",
+      "fields": ["user_id", "pay_period", "gross_pay", "currency", "pay_date"]
     }
-  ],
-  "entity_relationships": [
-    {
-      "relationship_name": "owns_account",
-      "subject_entity_name": "crm_user",
-      "object_entity_name": "crm_account"
-    },
-    {
-      "relationship_name": "user_has_payroll",
-      "subject_entity_name": "crm_user",
-      "object_entity_name": "crm_payroll_record"
-    }
-  ],
-  "entity_sources": {
+  },
+  "relationships": {
+    "owns_account": { "from": "crm_user", "to": "crm_account" },
+    "user_has_payroll": { "from": "crm_user", "to": "crm_payroll_record" }
+  },
+  "sources": {
     "crm_user": "postgres",
     "crm_account": "postgres",
     "crm_payroll_record": "csv"
   },
-  "bindings": {
-    "postgres": "crm-payroll-access.postgres",
-    "csv": "crm-payroll-access.csv"
+  "access": {
+    "summary": "CRM users read accounts they own and their own payroll records.",
+    "subject": "crm_user",
+    "subject_id": "user_id",
+    "allow": [
+      { "relationship": "owns_account", "resource": "crm_account" },
+      { "relationship": "user_has_payroll", "resource": "crm_payroll_record" }
+    ]
   }
 }
 ```
 
-**Field names** in the playbook are the stable vocabulary agents use. Physical column names are mapped in binding YAML (`fields` below).
+**Legacy format still loads:** array `entities[]`, `entity_relationships[]`, `entity_sources` + `bindings`, and full `relationship_access_rules` blocks.
 
-**Optional ReBAC** — add `relationship_access_rules` with `"active": true` and allow rules that walk `entity_relationships` paths. See `crm-payroll-access.json` for a full example.
+**Field names** in the playbook are the stable vocabulary agents use. Physical column names are mapped in binding YAML — only where they differ from playbook names.
 
-### 2. Binding YAML — where data lives
+### 2. Binding YAML — minimal shape
 
-Each binding file:
+Each binding file needs:
 
-- Names the **adapter** (`sql`, `csv`, `soql`, …)
-- Points at a **profile source** (`source_id` → `profiles/local.yaml`)
-- Maps each **playbook entity** to a table or file
-- Declares **relationships** with a link column for per-user counts/lists
+- **`source_id`** — profile source in `profiles/local.yaml`
+- **`entities`** — table/file, identifier (`id` or `id_field`), and fields
+- **`relationships`** — `object` entity + `link_column` on the object side
+
+Adapter type is inferred from the profile source or file stem (`.postgres` → `sql`, `.csv` → `csv`, `.salesforce` → `soql`). Lookups and count/list queries are compiled automatically.
 
 **Postgres** (`../bindings/crm-payroll-access.postgres.yaml`):
 
 ```yaml
-adapter: sql
-playbook_id: crm-payroll-access
 source_id: warehouse_pg
 
 entities:
   crm_user:
     from: users
-    id_field: user_id
-    fields:
-      user_id: user_id
-      full_name: full_name
+    id: user_id
+    fields: [full_name]
 
   crm_account:
     from: accounts
-    id_field: account_name
-    fields:
-      account_name: account_name
-      industry: industry
+    id: account_name
+    fields: [industry]
 
 relationships:
   owns_account:
-    join:
-      from_entity: crm_user
-      to_entity: crm_account
-      on: "accounts.owner_user_id = users.user_id"
-    subject_link_column: owner_user_id
+    object: crm_account
+    link_column: owner_user_id
 ```
-
-- `from` — physical table name
-- `fields` — playbook field → column name (`user_id: user_id`)
-- `subject_link_column` — on the **object** table/file, column that points at the subject’s id (used to compile count/list queries)
 
 **CSV** (`../bindings/crm-payroll-access.csv.yaml`):
 
 ```yaml
-adapter: csv
-playbook_id: crm-payroll-access
 source_id: payroll_csv
 
 entities:
+  crm_user:
+    from: payroll.csv
+    id: user_id
+    fields:
+      user_id: user
+      full_name: full_name
+
   crm_payroll_record:
     from: payroll.csv
-    id_field: payroll_id
+    id: payroll_id
     fields:
-      payroll_id: payroll_id
-      user_id: user          # playbook user_id → CSV column "user"
-      pay_period: pay_period
-      gross_pay: gross_pay
+      user_id: user
 
 relationships:
   user_has_payroll:
-    join:
-      from_entity: crm_user
-      to_entity: crm_payroll_record
-      on: "payroll.user = user.user"
-    subject_link_column: user
+    object: crm_payroll_record
+    link_column: user
 ```
 
-When the CSV column name differs from the playbook (`user` vs `user_id`), map it in `fields` — left side is playbook field, right side is physical column.
-
-You do **not** need to write SQL for lookups or counts: with `from`, `id_field`, `fields`, and `subject_link_column`, Rust compiles the queries automatically.
+When the CSV column differs from the playbook field (`user` vs `user_id`), map it in `fields` — left is playbook field, right is physical column. Same-name fields can be omitted; the runtime fills them from the playbook.
 
 **Salesforce** (`../bindings/salesforce-lead-access.salesforce.yaml`):
 
 ```yaml
-adapter: soql
-playbook_id: salesforce-lead-access
 source_id: salesforce_main
 
 entities:
   crm_user:
     from: User
-    id_field: Id
+    id: Id
     fields:
       user_id: Id
       full_name: Name
 
   crm_lead:
     from: Lead
-    id_field: Id
+    id: Id
     fields:
       lead_id: Id
       lead_name: Name
 
 relationships:
   assigned_to:
-    join:
-      from_entity: crm_user
-      to_entity: crm_lead
-      on: "Lead.OwnerId = User.Id"
-    subject_link_column: OwnerId
-    operations:
-      count_for_subject: "SELECT COUNT() FROM Lead WHERE OwnerId = :subject_id"
-      list_for_subject: "SELECT Id, Name FROM Lead WHERE OwnerId = :subject_id LIMIT :limit"
+    object: crm_lead
+    link_column: OwnerId
 ```
 
-- `from` — Salesforce object API name (`User`, `Lead`, …)
-- Use explicit SOQL for count/list when needed (`COUNT()` returns `totalSize`, not row aggregates)
-- MCP: `introspect_source(source_id=salesforce_main)` describes objects; optional `schema_name=User,Lead` to limit scope
+Legacy binding fields (`adapter`, `playbook_id`, `version`, `join.on`, manual `operations`) still work.
 
 ### 3. Profile — credentials
 
@@ -222,7 +205,7 @@ sources:
     auth: env:AG_SF_ACCESS_TOKEN
 ```
 
-Set env vars before starting (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_INSTANCE_URL`, `AG_SF_ACCESS_TOKEN`, etc.).
+Set env vars before starting (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_*`, etc.).
 
 ### 4. File layout
 
@@ -232,8 +215,6 @@ bindings/crm-payroll-access.postgres.yaml
 bindings/crm-payroll-access.csv.yaml
 profiles/local.yaml
 ```
-
-Binding file stem must match the playbook’s `bindings` map (e.g. key `postgres` → stem `crm-payroll-access.postgres`).
 
 ### 5. Validate and test
 
@@ -256,6 +237,6 @@ curl -s http://127.0.0.1:8787/query \
   }'
 ```
 
-Omit `binding_name` on queries — the runtime picks the binding from `entity_sources` + `bindings` based on the object entity.
+Omit `binding_name` on queries — the runtime routes from `sources` + binding file stems based on the object entity.
 
-For agent-assisted mapping, use MCP: `get_playbook_context` → `introspect_source` → `suggest_bindings` → `propose_binding` → `test_binding` → `save_binding`.
+For agent-assisted mapping, use MCP (admin token) per **[AGENTS.md](../AGENTS.md)**: `propose_playbook` → `save_playbook` → `get_binding("crm-payroll-access.postgres")` as template → `propose_binding` → `save_binding` with the **same compact YAML** (never save compiled/debug output).

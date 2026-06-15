@@ -1,64 +1,30 @@
 {
   "id": "salesforce-lead-access",
   "name": "Salesforce lead access",
-  "description": "CRM users and leads in Salesforce. One playbook, one SOQL binding (User + Lead objects).",
-  "category": "start_here",
-  "instructions": "1. Set AG_SF_INSTANCE_URL and AG_SF_ACCESS_TOKEN (see profiles/local.yaml → salesforce_main).\n2. Binding: bindings/salesforce-lead-access.salesforce.yaml maps User and Lead.\n3. Query without binding_name — runtime routes via entity_sources.\n4. MCP: introspect_source(salesforce_main) → suggest_bindings → test_binding.\n5. Example: resolve crm_user by name, count assigned_to leads for that user.",
-  "entities": [
-    {
-      "name": "crm_user",
-      "display_name": "CRM user",
-      "fields": [
-        { "field_name": "user_id", "field_type": "TEXT", "is_identifier": true },
-        { "field_name": "full_name", "field_type": "TEXT" }
-      ]
+  "description": "CRM users and leads in Salesforce (User + Lead objects).",
+  "entities": {
+    "crm_user": {
+      "id": "user_id",
+      "fields": ["full_name"]
     },
-    {
-      "name": "crm_lead",
-      "display_name": "Lead",
-      "fields": [
-        { "field_name": "lead_id", "field_type": "TEXT", "is_identifier": true },
-        { "field_name": "lead_name", "field_type": "TEXT" }
-      ]
+    "crm_lead": {
+      "id": "lead_id",
+      "fields": ["lead_name"]
     }
-  ],
-  "entity_relationships": [
-    {
-      "relationship_name": "assigned_to",
-      "subject_entity_name": "crm_user",
-      "object_entity_name": "crm_lead"
-    }
-  ],
-  "entity_sources": {
+  },
+  "relationships": {
+    "assigned_to": { "from": "crm_user", "to": "crm_lead" }
+  },
+  "sources": {
     "crm_user": "salesforce",
     "crm_lead": "salesforce"
   },
-  "bindings": {
-    "salesforce": "salesforce-lead-access.salesforce"
-  },
-  "relationship_access_rules": {
+  "access": {
     "summary": "CRM users read leads assigned to them (Lead.OwnerId).",
-    "subject_entity_name": "crm_user",
-    "subject_identifier_field": "user_id",
-    "deny_by_default": true,
-    "active": true,
-    "rules": [
-      {
-        "id": "assigned_leads",
-        "name": "Assigned leads",
-        "effect": "allow",
-        "action": "read",
-        "resource_entity_name": "crm_lead",
-        "description": "Leads linked via assigned_to (OwnerId)",
-        "path": [
-          {
-            "relationship_name": "assigned_to",
-            "direction": "forward",
-            "from_entity_name": "crm_user",
-            "to_entity_name": "crm_lead"
-          }
-        ]
-      }
+    "subject": "crm_user",
+    "subject_id": "user_id",
+    "allow": [
+      { "relationship": "assigned_to", "resource": "crm_lead" }
     ]
   }
 }

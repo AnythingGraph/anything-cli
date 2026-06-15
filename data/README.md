@@ -10,4 +10,4 @@ Set the path before starting reasoning-service:
 export AG_PAYROLL_CSV_PATH="/absolute/path/to/ag-cli/data/payroll.csv"
 ```
 
-Postgres tables (`users`, `accounts`) use column `user_id`. The payroll CSV uses column **`user`** — the playbook `field_mappings.payroll_csv` maps playbook field `user_id` → CSV column `user`. The CSV binding implements that mapping.
+Postgres tables (`users`, `accounts`) use column `user_id`. The payroll CSV uses column **`user`** — the CSV binding maps playbook field `user_id` → CSV column `user` in `fields`.

@@ -250,27 +250,58 @@ See **[playbooks/README.md](playbooks/README.md)** for the full authoring walkth
 
 Source credentials: `profiles/local.yaml` and env vars (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_*`). Details in the playbooks guide.
 
+### Auth roles (one MCP + bearer token)
+
+Set tokens on **both** reasoning-service and MCP (same values):
+
+```bash
+export AG_ADMIN_TOKENS="admin-secret-change-me"
+export AG_USER_TOKENS="user-secret-change-me"
+```
+
+Clients send `Authorization: Bearer <token>` on MCP HTTP requests. The token maps to:
+
+| Role | MCP tools | Reasoning HTTP |
+|------|-----------|----------------|
+| **user** | `query_graph`, `list_allowed_rows`, `get_playbook_context`, `list_playbooks`, `plan_query`, `execute_plan`, `health_check` | `/query`, `/plan`, `/execute`, `/rebac/*`, read playbook context |
+| **admin** | All user tools **plus** `list_sources`, `introspect_source`, `suggest_bindings`, `propose_binding`, `test_binding`, `save_binding`, `propose_playbook`, `save_playbook`, `list_bindings`, `get_binding` | All endpoints |
+
+When `AG_ADMIN_TOKENS` / `AG_USER_TOKENS` are **unset**, auth is disabled (local dev only).
+
+**Profiles are never written via MCP** — edit `profiles/local.yaml` manually. Admin agents use `list_sources` + `introspect_source` to see which connections exist and read schema only.
+
+**Live data is read-only** — bindings reject non-SELECT queries; MCP has no insert/update/delete tools.
+
+**Agent authoring:** see **[AGENTS.md](AGENTS.md)** for compact playbook/binding format. MCP `propose_binding` no longer returns expanded SQL by default — `save_binding` writes your submitted YAML **verbatim** (validation compiles in memory only).
+
+Stdio MCP: set `AG_MCP_AUTH_TOKEN` to an admin or user token from the lists above.
+
 ### Full MCP tool list
 
-| Tool | Purpose |
-|------|---------|
-| `health_check` | Service status |
-| `get_playbook_context` | Entities, relationships, bindings map |
-| `query_graph` | Ask a question (plan + execute + proof) |
-| `list_sources` / `introspect_source` | Discover connected systems |
-| `list_bindings` / `get_binding` | View mappings |
-| `suggest_bindings` / `propose_binding` / `test_binding` / `save_binding` | Agent-driven onboarding |
-| `plan_query` / `execute_plan` | Advanced: split plan and execution |
+| Tool | Role | Purpose |
+|------|------|---------|
+| `health_check` | user | Service status |
+| `list_playbooks` | user | List loaded playbook ids |
+| `get_playbook_context` | user | Entities, relationships, bindings map |
+| `query_graph` | user | Ask a question (plan + execute + proof) |
+| `list_allowed_rows` | user | ReBAC-visible row ids for a subject |
+| `plan_query` / `execute_plan` | user | Advanced: split plan and execution |
+| `list_sources` / `introspect_source` | admin | Discover connected systems (schema only) |
+| `list_bindings` / `get_binding` | admin | View mappings |
+| `propose_playbook` / `save_playbook` | admin | Author playbook JSON |
+| `suggest_bindings` / `propose_binding` / `test_binding` / `save_binding` | admin | Agent-driven binding onboarding |
 
 ### Manual start (alternative)
 
 ```bash
 # Terminal 1
 export AG_SQL_DSN="postgres://..."
+export AG_ADMIN_TOKENS="admin-secret"
+export AG_USER_TOKENS="user-secret"
 cargo run -p reasoning-service
 
 # Terminal 2
-cd mcp && AG_REASONING_URL=http://127.0.0.1:8787 npm run dev:http
+cd mcp && AG_REASONING_URL=http://127.0.0.1:8787 AG_ADMIN_TOKENS=admin-secret AG_USER_TOKENS=user-secret npm run dev:http
 ```
 
 ### Environment reference
@@ -285,10 +316,14 @@ cd mcp && AG_REASONING_URL=http://127.0.0.1:8787 npm run dev:http
 | `AG_PAYROLL_CSV_PATH` | — | CSV file path |
 | `AG_REASONING_URL` | `http://127.0.0.1:8787` | MCP → reasoning API |
 | `AG_MCP_PORT` | `3334` | MCP HTTP port |
+| `AG_ADMIN_TOKENS` | — | Comma-separated admin bearer tokens |
+| `AG_USER_TOKENS` | — | Comma-separated user bearer tokens |
+| `AG_MCP_AUTH_TOKEN` | — | Default token for stdio MCP (optional) |
+| `AG_DEBUG_COMPILED` | — | Set to `1` to include `debug_compiled_binding_yaml` in propose_binding (debug only) |
 
 ### HTTP API
 
-Reasoning service exposes `/health`, `/playbooks/{id}/context`, `/query`, binding onboarding endpoints, and more on port **8787**. See source in `reasoning-service/` if you need direct HTTP integration.
+Reasoning service exposes `/health`, `/playbooks/{id}/context`, `/playbooks/{id}/propose-playbook`, `/playbooks/{id}/save-playbook`, `/query`, binding onboarding endpoints, and more on port **8787**. Protected routes require `Authorization: Bearer <token>` when auth tokens are configured.
 
 ---
 

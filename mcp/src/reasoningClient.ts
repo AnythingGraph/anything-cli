@@ -1,9 +1,29 @@
 const DEFAULT_REASONING_URL = 'http://127.0.0.1:8787';
 
+let activeAuthToken: string | undefined;
+
+// Set bearer token forwarded to reasoning-service on every HTTP call.
+export function setReasoningAuthToken(authToken: string | undefined): void {
+  activeAuthToken = authToken?.trim() || undefined;
+}
+
 // Resolve reasoning-service base URL from environment.
 export function getReasoningBaseUrl(): string {
   const fromEnv = process.env.AG_REASONING_URL?.trim();
   return fromEnv || DEFAULT_REASONING_URL;
+}
+
+// Build fetch headers including optional Authorization bearer token.
+function buildRequestHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (activeAuthToken) {
+    headers.Authorization = 'Bearer ' + activeAuthToken;
+  }
+
+  return headers;
 }
 
 // Parse JSON or throw with response body for easier agent debugging.
@@ -17,27 +37,42 @@ async function parseJsonResponse(response: Response, actionLabel: string): Promi
 
 // Call reasoning-service GET /health.
 export async function reasoningHealthCheck(): Promise<Record<string, unknown>> {
-  const response = await fetch(`${getReasoningBaseUrl()}/health`);
+  const response = await fetch(`${getReasoningBaseUrl()}/health`, {
+    headers: buildRequestHeaders(),
+  });
   return parseJsonResponse(response, 'reasoning health');
+}
+
+// List playbook ids from reasoning-service.
+export async function listPlaybooks(): Promise<Record<string, unknown>> {
+  const response = await fetch(`${getReasoningBaseUrl()}/playbooks`, {
+    headers: buildRequestHeaders(),
+  });
+  return parseJsonResponse(response, 'list playbooks');
 }
 
 // Fetch playbook context summary from Rust core.
 export async function getPlaybookContext(playbookId: string): Promise<Record<string, unknown>> {
   const response = await fetch(
     `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/context`,
+    { headers: buildRequestHeaders() },
   );
   return parseJsonResponse(response, 'get playbook context');
 }
 
 // List configured data sources from profile.
 export async function listSources(): Promise<Record<string, unknown>> {
-  const response = await fetch(`${getReasoningBaseUrl()}/sources`);
+  const response = await fetch(`${getReasoningBaseUrl()}/sources`, {
+    headers: buildRequestHeaders(),
+  });
   return parseJsonResponse(response, 'list sources');
 }
 
 // List loaded binding file stems.
 export async function listBindings(): Promise<Record<string, unknown>> {
-  const response = await fetch(`${getReasoningBaseUrl()}/bindings`);
+  const response = await fetch(`${getReasoningBaseUrl()}/bindings`, {
+    headers: buildRequestHeaders(),
+  });
   return parseJsonResponse(response, 'list bindings');
 }
 
@@ -45,6 +80,7 @@ export async function listBindings(): Promise<Record<string, unknown>> {
 export async function getBinding(bindingName: string): Promise<Record<string, unknown>> {
   const response = await fetch(
     `${getReasoningBaseUrl()}/bindings/${encodeURIComponent(bindingName)}`,
+    { headers: buildRequestHeaders() },
   );
   return parseJsonResponse(response, 'get binding');
 }
@@ -58,7 +94,7 @@ export async function introspectSource(
     `${getReasoningBaseUrl()}/sources/${encodeURIComponent(sourceId)}/introspect`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildRequestHeaders(),
       body: JSON.stringify({ schema_name: schemaName }),
     },
   );
@@ -75,7 +111,7 @@ export async function suggestBindings(
     `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/suggest-bindings`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildRequestHeaders(),
       body: JSON.stringify({ source_id: sourceId, schema_name: schemaName }),
     },
   );
@@ -91,11 +127,27 @@ export async function proposeBinding(
     `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/propose-binding`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildRequestHeaders(),
       body: JSON.stringify({ binding_yaml: bindingYaml }),
     },
   );
   return parseJsonResponse(response, 'propose binding');
+}
+
+// Validate proposed playbook JSON without saving.
+export async function proposePlaybook(
+  playbookId: string,
+  playbookJson: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/propose-playbook`,
+    {
+      method: 'POST',
+      headers: buildRequestHeaders(),
+      body: JSON.stringify({ playbook_json: playbookJson }),
+    },
+  );
+  return parseJsonResponse(response, 'propose playbook');
 }
 
 // Test a binding with optional live execution.
@@ -107,7 +159,7 @@ export async function testBinding(
     `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/test-binding`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildRequestHeaders(),
       body: JSON.stringify(payload),
     },
   );
@@ -124,7 +176,7 @@ export async function saveBinding(
     `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/save-binding`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildRequestHeaders(),
       body: JSON.stringify({
         adapter_suffix: adapterSuffix,
         binding_yaml: bindingYaml,
@@ -134,11 +186,27 @@ export async function saveBinding(
   return parseJsonResponse(response, 'save binding');
 }
 
+// Save validated playbook JSON for a playbook id.
+export async function savePlaybook(
+  playbookId: string,
+  playbookJson: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${getReasoningBaseUrl()}/playbooks/${encodeURIComponent(playbookId)}/save-playbook`,
+    {
+      method: 'POST',
+      headers: buildRequestHeaders(),
+      body: JSON.stringify({ playbook_json: playbookJson }),
+    },
+  );
+  return parseJsonResponse(response, 'save playbook');
+}
+
 // Compile a structured query request into plan IR.
 export async function compilePlan(queryRequest: Record<string, unknown>): Promise<Record<string, unknown>> {
   const response = await fetch(`${getReasoningBaseUrl()}/plan`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildRequestHeaders(),
     body: JSON.stringify(queryRequest),
   });
   return parseJsonResponse(response, 'compile plan');
@@ -148,7 +216,7 @@ export async function compilePlan(queryRequest: Record<string, unknown>): Promis
 export async function executePlan(plan: Record<string, unknown>): Promise<Record<string, unknown>> {
   const response = await fetch(`${getReasoningBaseUrl()}/execute`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildRequestHeaders(),
     body: JSON.stringify({ plan }),
   });
   return parseJsonResponse(response, 'execute plan');
@@ -158,7 +226,7 @@ export async function executePlan(plan: Record<string, unknown>): Promise<Record
 export async function runQuery(queryRequest: Record<string, unknown>): Promise<Record<string, unknown>> {
   const response = await fetch(`${getReasoningBaseUrl()}/query`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildRequestHeaders(),
     body: JSON.stringify(queryRequest),
   });
   return parseJsonResponse(response, 'query');
@@ -172,7 +240,7 @@ export async function rebacAllowedRows(payload: {
 }): Promise<Record<string, unknown>> {
   const response = await fetch(`${getReasoningBaseUrl()}/rebac/allowed-rows`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildRequestHeaders(),
     body: JSON.stringify(payload),
   });
   return parseJsonResponse(response, 'rebac allowed rows');

@@ -2,8 +2,10 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::extract::{Path, Request, State};
+use axum::http::{header, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use plan_ir::{Plan, QueryRequest};
@@ -17,9 +19,14 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+mod auth;
+
+use auth::{AuthConfig, AuthFailure, AuthRole};
+
 #[derive(Clone)]
 struct AppState {
     runtime: Arc<ReasoningRuntime>,
+    auth: Arc<AuthConfig>,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,6 +34,7 @@ struct HealthResponse {
     ok: bool,
     service: String,
     playbooks: Vec<String>,
+    auth_required: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +57,16 @@ struct ProposeBindingRequest {
 struct SaveBindingRequest {
     adapter_suffix: String,
     binding_yaml: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProposePlaybookRequest {
+    playbook_json: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SavePlaybookRequest {
+    playbook_json: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,7 +104,19 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let runtime = Arc::new(ReasoningRuntime::bootstrap(config).await?);
-    let state = AppState { runtime };
+    let auth = Arc::new(AuthConfig::from_env());
+    let state = AppState {
+        runtime,
+        auth: auth.clone(),
+    };
+
+    if auth.auth_required {
+        tracing::info!("reasoning-service auth enabled (AG_ADMIN_TOKENS / AG_USER_TOKENS)");
+    } else {
+        tracing::warn!(
+            "reasoning-service auth disabled — set AG_ADMIN_TOKENS and/or AG_USER_TOKENS for production"
+        );
+    }
 
     let app = Router::new()
         .route("/health", get(health_handler))
@@ -96,6 +126,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/bindings/{binding_name}", get(get_binding_handler))
         .route("/playbooks", get(list_playbooks_handler))
         .route("/playbooks/{playbook_id}/context", get(playbook_context_handler))
+        .route(
+            "/playbooks/{playbook_id}/propose-playbook",
+            post(propose_playbook_handler),
+        )
+        .route(
+            "/playbooks/{playbook_id}/save-playbook",
+            post(save_playbook_handler),
+        )
         .route(
             "/playbooks/{playbook_id}/suggest-bindings",
             post(suggest_bindings_handler),
@@ -116,6 +154,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/execute", post(execute_handler))
         .route("/query", post(query_handler))
         .route("/rebac/allowed-rows", post(rebac_allowed_rows_handler))
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -132,12 +171,52 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Enforce bearer token role checks before route handlers run.
+async fn auth_middleware(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, AuthFailure> {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let required_role = AuthConfig::required_role(&method, &path);
+
+    if required_role == AuthRole::Public {
+        return Ok(next.run(request).await);
+    }
+
+    let bearer_token = extract_bearer_token(request.headers());
+    let caller_role = state.auth.resolve_token(bearer_token.as_deref())?;
+
+    if !AuthConfig::role_allows(required_role, caller_role) {
+        return Err(AuthFailure::Forbidden);
+    }
+
+    Ok(next.run(request).await)
+}
+
+// Parse Authorization: Bearer <token> header value.
+fn extract_bearer_token(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
     let playbooks = state.runtime.list_playbook_ids().await;
     Json(HealthResponse {
         ok: true,
         service: "reasoning-service".into(),
         playbooks,
+        auth_required: state.auth.auth_required,
     })
 }
 
@@ -259,6 +338,19 @@ async fn propose_binding_handler(
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
 }
 
+async fn propose_playbook_handler(
+    State(state): State<AppState>,
+    Path(playbook_id): Path<String>,
+    Json(request): Json<ProposePlaybookRequest>,
+) -> Result<Json<runtime::ProposePlaybookResponse>, (StatusCode, String)> {
+    state
+        .runtime
+        .propose_playbook(&playbook_id, &request.playbook_json)
+        .await
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
 async fn test_binding_handler(
     State(state): State<AppState>,
     Path(playbook_id): Path<String>,
@@ -297,6 +389,19 @@ async fn save_binding_handler(
     state
         .runtime
         .save_binding(&playbook_id, &request.adapter_suffix, &request.binding_yaml)
+        .await
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+async fn save_playbook_handler(
+    State(state): State<AppState>,
+    Path(playbook_id): Path<String>,
+    Json(request): Json<SavePlaybookRequest>,
+) -> Result<Json<runtime::SavePlaybookResponse>, (StatusCode, String)> {
+    state
+        .runtime
+        .save_playbook(&playbook_id, &request.playbook_json)
         .await
         .map(Json)
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
