@@ -31,7 +31,7 @@
     <text x="52" y="172" fill="#9775fa" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="0.06em">PLAYBOOK</text>
     <text x="52" y="200" fill="#1a1625" font-family="monospace" font-size="17" font-weight="700">playbooks/crm-payroll-access.json</text>
     <text x="52" y="230" fill="#5c5470" font-family="monospace" font-size="14">{</text>
-    <text x="72" y="254" fill="#5c5470" font-family="monospace" font-size="14">"entities": { "crm_user": { "id": "user_id" }, "crm_account": { ... }, "crm_payroll_record": { ... } },</text>
+    <text x="72" y="254" fill="#5c5470" font-family="monospace" font-size="14">"entities": { "crm_user": { "identifier": "user_id" }, "crm_account": { ... }, ... },</text>
     <text x="72" y="278" fill="#5c5470" font-family="monospace" font-size="14">"relationships": { "owns_account": { "from": "crm_user", "to": "crm_account" }, ... },</text>
     <text x="72" y="302" fill="#1a1625" font-family="monospace" font-size="14" font-weight="600">"sources": {</text>
     <text x="92" y="326" fill="#9775fa" font-family="monospace" font-size="14">"crm_user": "postgres",  "crm_account": "postgres",  "crm_payroll_record": "csv"</text>

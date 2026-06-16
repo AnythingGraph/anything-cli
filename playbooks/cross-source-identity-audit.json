@@ -4,23 +4,16 @@
   "description": "Align CRM users in warehouse_pg with payroll identities in payroll_csv. Find orphans and linked identities by user_id.",
   "entities": {
     "crm_user": {
-      "id": "user_id",
-      "fields": [
-        "full_name"
-      ]
+      "identifier": "user_id",
+      "attributes": ["full_name"]
     },
     "payroll_user": {
-      "id": "user_id",
-      "fields": [
-        "full_name"
-      ]
+      "identifier": "user_id",
+      "attributes": ["full_name"]
     }
   },
   "relationships": {
-    "same_person": {
-      "from": "crm_user",
-      "to": "payroll_user"
-    }
+    "same_person": { "from": "crm_user", "to": "payroll_user" }
   },
   "sources": {
     "crm_user": "postgres",
@@ -31,10 +24,7 @@
     "subject": "crm_user",
     "subject_id": "user_id",
     "allow": [
-      {
-        "relationship": "same_person",
-        "resource": "payroll_user"
-      }
+      { "relationship": "same_person", "resource": "payroll_user" }
     ]
   }
 }

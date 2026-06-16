@@ -1,4 +1,8 @@
 mod introspect;
+mod authoring;
+
+pub use introspect::introspect_salesforce_schema;
+pub use authoring::authoring_guide;
 
 use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState, map_row_to_playbook_fields, row_map_to_json};
 use async_trait::async_trait;
@@ -7,8 +11,6 @@ use plan_ir::{EntityRef, PlanStep, StepResult};
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
-
-pub use introspect::introspect_salesforce_schema;
 
 pub struct SoqlAdapter {
     http_client: Client,
@@ -57,10 +59,10 @@ impl DataAdapter for SoqlAdapter {
                 let entity_binding = binding.entities.get(entity).ok_or_else(|| {
                     AdapterError::MissingEntityBinding(entity.clone())
                 })?;
-                let lookup_key = if by_field == "full_name" {
-                    "by_name"
-                } else {
+                let lookup_key = if by_field.as_str() == entity_binding.id_field {
                     "by_identifier"
+                } else {
+                    "by_name"
                 };
                 let query_template = entity_binding.lookup.get(lookup_key).ok_or_else(|| {
                     AdapterError::MissingOperation(format!("{entity}.{lookup_key}"))

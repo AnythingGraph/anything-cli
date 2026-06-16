@@ -8,6 +8,7 @@ Sample playbooks for AnythingGraph CLI. Setup and MCP usage: **[main README](../
 
 | Playbook | Sources |
 |----------|---------|
+| `crm-example` | Postgres |
 | `simple-crm-access` | Postgres |
 | `crm-payroll-access` | Postgres + CSV |
 | `salesforce-lead-access` | Salesforce (User + Lead) |
@@ -55,7 +56,7 @@ For playbook **`crm-payroll-access`** with source keys **`postgres`** and **`csv
 | Block | Purpose |
 |-------|---------|
 | `id`, `name`, `description` | Playbook identity (`name` defaults from `id` if omitted) |
-| `entities` | Map of entity name → `{ "id": "<identifier field>", "fields": [...] }` |
+| `entities` | Map of entity name → `{ "identifier": "<id field>", "attributes": [...] }` |
 | `relationships` | Map of relationship name → `{ "from", "to" }` entity names |
 | `sources` | Map of entity name → source key (`postgres`, `csv`, `salesforce`, …) |
 | `access` | Optional ReBAC — subject + allow rules (expanded to full rules at load time) |
@@ -68,11 +69,11 @@ Binding file stems are inferred automatically: source key `postgres` on playbook
   "name": "CRM + payroll access",
   "description": "Users and accounts in Postgres; payroll in CSV.",
   "entities": {
-    "crm_user": { "id": "user_id", "fields": ["full_name"] },
-    "crm_account": { "id": "account_name", "fields": ["industry"] },
+    "crm_user": { "identifier": "user_id", "attributes": ["full_name"] },
+    "crm_account": { "identifier": "account_name", "attributes": ["industry"] },
     "crm_payroll_record": {
-      "id": "payroll_id",
-      "fields": ["user_id", "pay_period", "gross_pay", "currency", "pay_date"]
+      "identifier": "payroll_id",
+      "attributes": ["user_id", "pay_period", "gross_pay", "currency", "pay_date"]
     }
   },
   "relationships": {
@@ -96,9 +97,9 @@ Binding file stems are inferred automatically: source key `postgres` on playbook
 }
 ```
 
-**Legacy format still loads:** array `entities[]`, `entity_relationships[]`, `entity_sources` + `bindings`, and full `relationship_access_rules` blocks.
+**Legacy array format still loads:** `entities[]`, `entity_relationships[]`, `entity_sources` + `bindings`, and full `relationship_access_rules` blocks. New compact playbooks must use `identifier` + `attributes` on entities (not `id` / `fields`).
 
-**Field names** in the playbook are the stable vocabulary agents use. Physical column names are mapped in binding YAML — only where they differ from playbook names.
+**Field names** in the playbook (`identifier`, `attributes`) are the stable vocabulary agents use. Physical column names are mapped in binding YAML (`id`, `fields`) — only where they differ from playbook names.
 
 ### 2. Binding YAML — minimal shape
 

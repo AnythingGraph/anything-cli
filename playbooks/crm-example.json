@@ -1,7 +1,7 @@
 {
-  "id": "simple-crm-access",
-  "name": "Simple CRM access",
-  "description": "Sales rep sees accounts they own in Postgres.",
+  "id": "crm-example",
+  "name": "CRM example",
+  "description": "Example playbook: CRM users and accounts in Postgres only (warehouse_pg).",
   "entities": {
     "crm_user": {
       "identifier": "user_id",
@@ -13,7 +13,10 @@
     }
   },
   "relationships": {
-    "owns_account": { "from": "crm_user", "to": "crm_account" }
+    "owns_account": {
+      "from": "crm_user",
+      "to": "crm_account"
+    }
   },
   "sources": {
     "crm_user": "postgres",
@@ -24,7 +27,10 @@
     "subject": "crm_user",
     "subject_id": "user_id",
     "allow": [
-      { "relationship": "owns_account", "resource": "crm_account" }
+      {
+        "relationship": "owns_account",
+        "resource": "crm_account"
+      }
     ]
   }
 }

@@ -8,6 +8,7 @@ import {
   compilePlan,
   executePlan,
   getBinding,
+  getAdapterGuide,
   getPlaybookContext,
   introspectSource,
   listBindings,
@@ -34,19 +35,24 @@ export interface ThinMcpServerOptions {
 function buildMcpInstructions(role: McpAuthRole): string {
   const compactAuthoring = [
     'COMPACT AUTHORING (required for new playbooks/bindings):',
-    '- Playbook JSON: entities/relationships/sources maps; optional access block. See ag-cli/AGENTS.md.',
+    '- Playbook JSON: entities use identifier + attributes; relationships/sources maps; optional access block. See ag-cli/AGENTS.md.',
     '- Binding YAML: source_id + entities (from, id, fields) + relationships (object, link_column) only.',
+    '- Playbook identifier/attributes are logical vocabulary; binding id/fields map to physical storage (table/column/property).',
     '- NEVER include: lookup, operations, join, raw SQL/SOQL, adapter, version, playbook_id in bindings.',
-    '- Before authoring: get_binding("crm-payroll-access.postgres") and get_binding("crm-payroll-access.csv") as templates.',
+    '- SQL/CSV templates: get_binding("crm-payroll-access.postgres") and get_binding("crm-payroll-access.csv").',
+    '- Mongo/REST/SOQL: get_adapter_guide(source_id) → use example_binding_yaml + instructions_markdown; introspect_source before propose_binding.',
     '- propose_playbook / propose_binding validate only. save_* must use YOUR SAME compact input — NOT debug_compiled_binding_yaml.',
   ];
 
   const shared = [
     'AnythingGraph thin reasoning layer — MCP front-end over Rust reasoning-service.',
     'Full agent guide: ag-cli/AGENTS.md',
+    'USE MCP TOOLS ONLY: call registered MCP tools (health_check, introspect_source, query_graph, etc.).',
+    'Do NOT use curl, shell HTTP, or Python scripts to call http://127.0.0.1:8787 unless the user explicitly requests a standalone script or MCP is unavailable.',
     'Profiles/credentials are configured manually in profiles/local.yaml (never written via MCP).',
     'Data sources are read-only at query time — MCP cannot insert/update/delete live records.',
     'Pass Authorization: Bearer <token> on MCP HTTP requests; token maps to admin or user role.',
+    'After list_sources: call get_adapter_guide(source_id) before propose_binding (per-adapter rules).',
   ];
 
   if (role === 'admin') {
@@ -54,9 +60,9 @@ function buildMcpInstructions(role: McpAuthRole): string {
       ...shared,
       ...compactAuthoring,
       'Admin onboarding workflow:',
-      '1) health_check → list_sources → introspect_source(source_id)',
-      '2) propose_playbook(playbook_id, compact JSON) → save_playbook(same JSON)',
-      '3) suggest_bindings → propose_binding(minimal YAML) → test_binding → save_binding(same YAML, adapter_suffix=source key)',
+      '1) health_check → list_sources → get_adapter_guide(source_id) for each source you will bind',
+      '2) introspect_source(source_id, schema_name when required)',
+      '3) propose_playbook → save_playbook → suggest_bindings → propose_binding → test_binding → save_binding',
       '4) Users query with query_graph(playbook_id, subject_id, ...).',
     ].join('\n');
   }
@@ -121,10 +127,22 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
 
   registerRoleTool(
     'list_sources',
-    'List configured data sources from profiles/local.yaml (no secrets returned)',
+    'List configured data sources from profiles/local.yaml (no secrets). Each entry includes authoring_next_step — call get_adapter_guide next.',
     {},
     async () => {
       const result = await listSources();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  registerRoleTool(
+    'get_adapter_guide',
+    'Per-adapter binding authoring guide for a profile source_id. Call after list_sources, before propose_binding. Returns instructions_markdown, example_binding_yaml, forbidden keys.',
+    {
+      source_id: z.string().describe('Profile source id from list_sources, e.g. warehouse_pg or payroll_csv'),
+    },
+    async ({ source_id: sourceId }) => {
+      const result = await getAdapterGuide(String(sourceId));
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -141,7 +159,7 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
 
   registerRoleTool(
     'get_binding',
-    'Load one binding YAML by stem — use crm-payroll-access.postgres and .csv as compact templates before authoring',
+    'Load one saved binding YAML by stem. SQL/CSV demos: crm-payroll-access.postgres / .csv. For Mongo/REST/SOQL use get_adapter_guide(source_id) instead.',
     { binding_name: z.string().describe('Binding stem, e.g. crm-payroll-access.postgres') },
     async ({ binding_name: bindingName }) => {
       const result = await getBinding(String(bindingName));
@@ -182,7 +200,7 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
 
   registerRoleTool(
     'propose_playbook',
-    'Validate compact playbook JSON (entities/relationships/sources maps). Read save_instruction — save the same JSON via save_playbook, not a reformatted dump.',
+    'Validate compact playbook JSON (entities with identifier/attributes, relationships/sources maps). Read save_instruction — save the same JSON via save_playbook, not a reformatted dump.',
     {
       playbook_id: z.string().describe('Must match "id" inside playbook_json'),
       playbook_json: z.string().describe('Compact JSON string — see AGENTS.md'),

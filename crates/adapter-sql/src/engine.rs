@@ -42,10 +42,10 @@ impl DataAdapter for GenericSqlAdapter {
                 let entity_binding = binding.entities.get(entity).ok_or_else(|| {
                     AdapterError::MissingEntityBinding(entity.clone())
                 })?;
-                let lookup_key = if by_field == "full_name" {
-                    "by_name"
-                } else {
+                let lookup_key = if by_field.as_str() == entity_binding.id_field {
                     "by_identifier"
+                } else {
+                    "by_name"
                 };
                 let query_template = entity_binding.lookup.get(lookup_key).ok_or_else(|| {
                     AdapterError::MissingOperation(format!("{entity}.{lookup_key}"))

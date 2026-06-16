@@ -141,7 +141,7 @@ fn format_name_lookup(
 ) -> String {
     match adapter_type {
         "mysql" => format!(
-            "SELECT {select_columns} FROM {table_name} WHERE LOWER({name_column}) = LOWER(:name) LIMIT 1"
+            "SELECT {select_columns} FROM {table_name} WHERE LOWER({name_column}) LIKE CONCAT('%', LOWER(:name), '%') LIMIT 1"
         ),
         "mssql" => format!(
             "SELECT TOP 1 {select_columns} FROM {table_name} WHERE LOWER({name_column}) = LOWER(:name)"
@@ -150,7 +150,7 @@ fn format_name_lookup(
             "SELECT {select_columns} FROM {table_name} WHERE {name_column} = :name LIMIT 1"
         ),
         _ => format!(
-            "SELECT {select_columns} FROM {table_name} WHERE {name_column} ILIKE :name LIMIT 1"
+            "SELECT {select_columns} FROM {table_name} WHERE {name_column} ILIKE '%' || :name || '%' LIMIT 1"
         ),
     }
 }

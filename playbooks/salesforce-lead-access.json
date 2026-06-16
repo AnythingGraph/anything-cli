@@ -1,15 +1,15 @@
 {
   "id": "salesforce-lead-access",
   "name": "Salesforce lead access",
-  "description": "CRM users and leads in Salesforce (User + Lead objects).",
+  "description": "Salesforce user sees leads assigned to them.",
   "entities": {
     "crm_user": {
-      "id": "user_id",
-      "fields": ["full_name"]
+      "identifier": "user_id",
+      "attributes": ["full_name"]
     },
     "crm_lead": {
-      "id": "lead_id",
-      "fields": ["lead_name"]
+      "identifier": "lead_id",
+      "attributes": ["lead_name"]
     }
   },
   "relationships": {
@@ -20,7 +20,7 @@
     "crm_lead": "salesforce"
   },
   "access": {
-    "summary": "CRM users read leads assigned to them (Lead.OwnerId).",
+    "summary": "Sales users read leads assigned to them.",
     "subject": "crm_user",
     "subject_id": "user_id",
     "allow": [

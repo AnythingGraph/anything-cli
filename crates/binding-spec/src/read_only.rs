@@ -44,6 +44,15 @@ pub fn read_only_query_violation(query_text: &str) -> Option<String> {
         return None;
     }
 
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("find:")
+        || lower.starts_with("count:")
+        || lower.starts_with("get ")
+        || lower.starts_with("post ")
+    {
+        return None;
+    }
+
     let upper = trimmed.to_uppercase();
     if !(upper.starts_with("SELECT") || upper.starts_with("WITH")) {
         return Some("only SELECT (or WITH … SELECT) queries are allowed".into());

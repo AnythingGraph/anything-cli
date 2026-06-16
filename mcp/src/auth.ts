@@ -91,6 +91,7 @@ export const USER_MCP_TOOLS = [
 // Admin-only MCP tools (authoring + schema discovery).
 export const ADMIN_MCP_TOOLS = [
   'list_sources',
+  'get_adapter_guide',
   'list_bindings',
   'get_binding',
   'introspect_source',

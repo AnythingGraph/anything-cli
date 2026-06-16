@@ -1,0 +1,9 @@
+source_id: api_main
+
+entities:
+  crm_user:
+    from: /users
+    id: user_id
+    fields:
+      user_id: id
+      full_name: name

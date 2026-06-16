@@ -1,0 +1,9 @@
+source_id: salesforce_main
+
+entities:
+  crm_account:
+    from: Account
+    id: Id
+    fields:
+      account_name: Name
+      industry: Industry

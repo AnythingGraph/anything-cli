@@ -4,37 +4,21 @@
   "description": "Federated sales roster in Postgres (warehouse_pg) plus payroll history in CSV (payroll_csv). Reps see owned accounts and their pay records.",
   "entities": {
     "crm_user": {
-      "id": "user_id",
-      "fields": [
-        "full_name"
-      ]
+      "identifier": "user_id",
+      "attributes": ["full_name"]
     },
     "crm_account": {
-      "id": "account_name",
-      "fields": [
-        "industry"
-      ]
+      "identifier": "account_name",
+      "attributes": ["industry"]
     },
     "payroll_record": {
-      "id": "payroll_id",
-      "fields": [
-        "user_id",
-        "pay_period",
-        "gross_pay",
-        "currency",
-        "pay_date"
-      ]
+      "identifier": "payroll_id",
+      "attributes": ["user_id", "pay_period", "gross_pay", "currency", "pay_date"]
     }
   },
   "relationships": {
-    "owns_account": {
-      "from": "crm_user",
-      "to": "crm_account"
-    },
-    "received_payroll": {
-      "from": "crm_user",
-      "to": "payroll_record"
-    }
+    "owns_account": { "from": "crm_user", "to": "crm_account" },
+    "received_payroll": { "from": "crm_user", "to": "payroll_record" }
   },
   "sources": {
     "crm_user": "postgres",
@@ -46,14 +30,8 @@
     "subject": "crm_user",
     "subject_id": "user_id",
     "allow": [
-      {
-        "relationship": "owns_account",
-        "resource": "crm_account"
-      },
-      {
-        "relationship": "received_payroll",
-        "resource": "payroll_record"
-      }
+      { "relationship": "owns_account", "resource": "crm_account" },
+      { "relationship": "received_payroll", "resource": "payroll_record" }
     ]
   }
 }

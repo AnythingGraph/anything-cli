@@ -1,5 +1,8 @@
 mod engine;
 mod introspect;
+mod authoring;
+
+pub use authoring::{mssql_authoring_guide, mysql_authoring_guide, postgres_authoring_guide};
 
 pub use engine::{GenericSqlAdapter, SqlDialect};
 pub use introspect::{

@@ -68,12 +68,11 @@ struct AccessAllowRule {
 
 #[derive(Debug, Deserialize)]
 struct CompactEntity {
-    #[serde(default)]
-    id: Option<String>,
+    identifier: String,
     #[serde(default)]
     display_name: Option<String>,
     #[serde(default)]
-    fields: Value,
+    attributes: Value,
 }
 
 // Parse playbook JSON (compact or legacy) into canonical PlaybookDefinition.
@@ -180,16 +179,22 @@ fn compact_entity_to_playbook_entity(
         .display_name
         .unwrap_or_else(|| humanize_identifier(entity_name));
 
-    let mut fields = Vec::new();
-    let identifier_field = compact.id.unwrap_or_else(|| "id".to_string());
+    let identifier_field = compact.identifier.trim();
+    if identifier_field.is_empty() {
+        return Err(PlaybookError::Validation(format!(
+            "entity '{entity_name}' requires a non-empty identifier"
+        )));
+    }
+    let identifier_field = identifier_field.to_string();
 
+    let mut fields = Vec::new();
     fields.push(PlaybookField {
         field_name: identifier_field.clone(),
         field_type: String::new(),
         is_identifier: true,
     });
 
-    match &compact.fields {
+    match &compact.attributes {
         Value::Null => {}
         Value::Array(items) => {
             for item in items {
@@ -235,9 +240,9 @@ fn compact_entity_to_playbook_entity(
             }
         }
         _ => {
-            return Err(PlaybookError::Validation(
-                format!("entity '{entity_name}' fields must be an array or object"),
-            ));
+            return Err(PlaybookError::Validation(format!(
+                "entity '{entity_name}' attributes must be an array or object"
+            )));
         }
     }
 

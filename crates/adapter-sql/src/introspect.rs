@@ -73,18 +73,27 @@ async fn introspect_information_schema(
         SqlDialect::Mssql => "mssql",
     };
 
-    let column_query = "
+    let schema_param = match dialect {
+        SqlDialect::Postgres => "$1",
+        SqlDialect::Mysql => "?",
+        SqlDialect::Mssql => unreachable!("mssql uses tiberius introspection"),
+    };
+
+    let column_query = format!(
+        "
         SELECT column_info.table_name, column_info.column_name, column_info.data_type, column_info.is_nullable
         FROM information_schema.columns AS column_info
         JOIN information_schema.tables AS table_info
           ON column_info.table_schema = table_info.table_schema
          AND column_info.table_name = table_info.table_name
-        WHERE column_info.table_schema = ?
+        WHERE column_info.table_schema = {schema_param}
           AND table_info.table_type = 'BASE TABLE'
         ORDER BY column_info.table_name, column_info.ordinal_position
-        ";
+        "
+    );
 
-    let foreign_key_query = "
+    let foreign_key_query = format!(
+        "
         SELECT
             source_table.table_name AS table_name,
             source_column.column_name AS column_name,
@@ -104,9 +113,10 @@ async fn introspect_information_schema(
           ON target_table.table_name = target_column.table_name
          AND target_table.table_schema = target_column.table_schema
         WHERE table_constraint.constraint_type = 'FOREIGN KEY'
-          AND table_constraint.table_schema = ?
+          AND table_constraint.table_schema = {schema_param}
         ORDER BY source_table.table_name, source_column.column_name
-        ";
+        "
+    );
 
     match dialect {
         SqlDialect::Postgres => {
@@ -116,12 +126,12 @@ async fn introspect_information_schema(
                 .connect(dsn)
                 .await
                 .map_err(|error| AdapterError::Message(format!("postgres connect failed: {error}")))?;
-            let column_rows = sqlx::query(column_query)
+            let column_rows = sqlx::query(&column_query)
                 .bind(schema_name)
                 .fetch_all(&pool)
                 .await
                 .map_err(|error| AdapterError::Message(format!("schema columns query failed: {error}")))?;
-            let foreign_key_rows = sqlx::query(foreign_key_query)
+            let foreign_key_rows = sqlx::query(&foreign_key_query)
                 .bind(schema_name)
                 .fetch_all(&pool)
                 .await
@@ -137,12 +147,12 @@ async fn introspect_information_schema(
                 .connect(dsn)
                 .await
                 .map_err(|error| AdapterError::Message(format!("mysql connect failed: {error}")))?;
-            let column_rows = sqlx::query(column_query)
+            let column_rows = sqlx::query(&column_query)
                 .bind(schema_name)
                 .fetch_all(&pool)
                 .await
                 .map_err(|error| AdapterError::Message(format!("schema columns query failed: {error}")))?;
-            let foreign_key_rows = sqlx::query(foreign_key_query)
+            let foreign_key_rows = sqlx::query(&foreign_key_query)
                 .bind(schema_name)
                 .fetch_all(&pool)
                 .await

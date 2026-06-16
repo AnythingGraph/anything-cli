@@ -9,6 +9,10 @@ use plan_ir::{EntityRef, PlanStep, StepResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+mod authoring;
+
+pub use authoring::authoring_guide;
+
 pub struct CsvAdapter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

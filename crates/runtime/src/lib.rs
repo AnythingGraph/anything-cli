@@ -30,6 +30,9 @@ use proof::ProofEnvelope;
 use tokio::sync::RwLock;
 
 mod rebac_enforce;
+mod adapter_guides;
+
+pub use adapter_core::AdapterAuthoringGuide;
 
 pub struct RuntimeConfig {
     pub playbooks_dir: PathBuf,
@@ -363,6 +366,7 @@ impl ReasoningRuntime {
                     .instance_url
                     .as_ref()
                     .is_some_and(|value| !value.trim().is_empty()),
+                authoring_next_step: adapter_guides::adapter_guide_next_step(source_id),
             });
         }
         sources.sort_by(|left, right| left.source_id.cmp(&right.source_id));
@@ -384,6 +388,28 @@ impl ReasoningRuntime {
             .get(binding_name)
             .cloned()
             .ok_or_else(|| anyhow!("binding not found: {binding_name}"))
+    }
+
+    // Return per-adapter binding authoring guide for a configured profile source.
+    pub async fn get_adapter_guide(&self, source_id: &str) -> Result<AdapterGuideResponse> {
+        let profile = self.profile.read().await;
+        let connection = profile
+            .sources
+            .get(source_id)
+            .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?;
+
+        let guide = adapter_guides::resolve_authoring_guide(&connection.adapter).ok_or_else(|| {
+            anyhow!(
+                "no authoring guide for adapter type '{}' (source '{source_id}')",
+                connection.adapter
+            )
+        })?;
+
+        Ok(AdapterGuideResponse {
+            source_id: source_id.to_string(),
+            adapter: connection.adapter.clone(),
+            guide,
+        })
     }
 
     // Introspect a configured source for agent-driven binding generation.
@@ -769,6 +795,14 @@ pub struct SourceSummary {
     pub adapter: String,
     pub has_dsn: bool,
     pub has_instance_url: bool,
+    pub authoring_next_step: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdapterGuideResponse {
+    pub source_id: String,
+    pub adapter: String,
+    pub guide: AdapterAuthoringGuide,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1009,7 +1043,7 @@ pub fn default_paths_from_workspace(workspace_root: &Path) -> RuntimeConfig {
 
 const BINDING_SAVE_INSTRUCTION: &str = "Save the same declarative binding YAML you passed to propose_binding via save_binding. The file on disk will match your submitted YAML (compact format: source_id, entities.from/id/fields, relationships.object/link_column). Do NOT add lookup/operations/join/SQL blocks.";
 
-const PLAYBOOK_SAVE_INSTRUCTION: &str = "Save the same compact playbook JSON you authored via save_playbook. Use entities/relationships/sources maps (see AGENTS.md). formatted_playbook_json is a preview only.";
+const PLAYBOOK_SAVE_INSTRUCTION: &str = "Save the same compact playbook JSON you authored via save_playbook. Use entities with identifier/attributes, plus relationships/sources maps (see AGENTS.md). formatted_playbook_json is a preview only.";
 
 // Include compiled binding YAML in propose_binding responses only when debugging.
 fn debug_compiled_binding_yaml(binding: &PlaybookBinding) -> Option<String> {

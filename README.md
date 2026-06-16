@@ -96,7 +96,9 @@ The agent calls **`query_graph`** twice — Postgres for accounts, CSV for payro
 
 ## MCP tools — what to ask your agent
 
-Connect **anythinggraph-thin** MCP, then use natural language. These are the high-impact flows:
+Connect **anythinggraph-thin** MCP, then use natural language. Agents should call **MCP tools** (`introspect_source`, `query_graph`, etc.) — not `curl` or Python against port 8787. See **[AGENTS.md](AGENTS.md)**.
+
+These are the high-impact flows:
 
 ### Ask questions (most common)
 
@@ -264,11 +266,11 @@ Clients send `Authorization: Bearer <token>` on MCP HTTP requests. The token map
 | Role | MCP tools | Reasoning HTTP |
 |------|-----------|----------------|
 | **user** | `query_graph`, `list_allowed_rows`, `get_playbook_context`, `list_playbooks`, `plan_query`, `execute_plan`, `health_check` | `/query`, `/plan`, `/execute`, `/rebac/*`, read playbook context |
-| **admin** | All user tools **plus** `list_sources`, `introspect_source`, `suggest_bindings`, `propose_binding`, `test_binding`, `save_binding`, `propose_playbook`, `save_playbook`, `list_bindings`, `get_binding` | All endpoints |
+| **admin** | All user tools **plus** `list_sources`, `get_adapter_guide`, `introspect_source`, `suggest_bindings`, `propose_binding`, `test_binding`, `save_binding`, `propose_playbook`, `save_playbook`, `list_bindings`, `get_binding` | All endpoints |
 
 When `AG_ADMIN_TOKENS` / `AG_USER_TOKENS` are **unset**, auth is disabled (local dev only).
 
-**Profiles are never written via MCP** — edit `profiles/local.yaml` manually. Admin agents use `list_sources` + `introspect_source` to see which connections exist and read schema only.
+**Profiles are never written via MCP** — edit `profiles/local.yaml` manually. Admin agents use `list_sources` → `get_adapter_guide(source_id)` → `introspect_source` before authoring bindings.
 
 **Live data is read-only** — bindings reject non-SELECT queries; MCP has no insert/update/delete tools.
 
@@ -286,7 +288,7 @@ Stdio MCP: set `AG_MCP_AUTH_TOKEN` to an admin or user token from the lists abov
 | `query_graph` | user | Ask a question (plan + execute + proof) |
 | `list_allowed_rows` | user | ReBAC-visible row ids for a subject |
 | `plan_query` / `execute_plan` | user | Advanced: split plan and execution |
-| `list_sources` / `introspect_source` | admin | Discover connected systems (schema only) |
+| `list_sources` / `get_adapter_guide` / `introspect_source` | admin | Discover sources; per-adapter binding rules; live schema |
 | `list_bindings` / `get_binding` | admin | View mappings |
 | `propose_playbook` / `save_playbook` | admin | Author playbook JSON |
 | `suggest_bindings` / `propose_binding` / `test_binding` / `save_binding` | admin | Agent-driven binding onboarding |

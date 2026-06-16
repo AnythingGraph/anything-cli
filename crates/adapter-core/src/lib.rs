@@ -1,3 +1,7 @@
+pub mod authoring;
+
+pub use authoring::AdapterAuthoringGuide;
+
 use async_trait::async_trait;
 use binding_spec::{EntityBinding, PlaybookBinding, SourceProfile};
 use plan_ir::{EntityRef, PlanStep, StepResult};

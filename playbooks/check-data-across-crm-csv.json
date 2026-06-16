@@ -1,0 +1,58 @@
+{
+  "id": "check-data-across-crm-csv",
+  "name": "Check data across CRM and CSV",
+  "description": "Federated playbook mapping CRM users and accounts from Postgres (warehouse_pg) with payroll records from CSV (payroll_csv). Compare identity and compensation data across both sources.",
+  "entities": {
+    "crm_user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    },
+    "crm_account": {
+      "identifier": "account_name",
+      "attributes": [
+        "industry"
+      ]
+    },
+    "payroll_record": {
+      "identifier": "payroll_id",
+      "attributes": [
+        "user_id",
+        "currency",
+        "pay_period",
+        "pay_date",
+        "gross_pay"
+      ]
+    }
+  },
+  "relationships": {
+    "owns_account": {
+      "from": "crm_user",
+      "to": "crm_account"
+    },
+    "received_payroll": {
+      "from": "crm_user",
+      "to": "payroll_record"
+    }
+  },
+  "entity_sources": {
+    "crm_user": "postgres",
+    "crm_account": "postgres",
+    "payroll_record": "csv"
+  },
+  "access": {
+    "subject": "crm_user",
+    "subject_id": "user_id",
+    "allow": [
+      {
+        "resource": "crm_account",
+        "relationship": "owns_account"
+      },
+      {
+        "resource": "payroll_record",
+        "relationship": "received_payroll"
+      }
+    ]
+  }
+}

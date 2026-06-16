@@ -121,6 +121,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/sources", get(list_sources_handler))
+        .route("/sources/{source_id}/adapter-guide", get(get_adapter_guide_handler))
         .route("/sources/{source_id}/introspect", post(introspect_source_handler))
         .route("/bindings", get(list_bindings_handler))
         .route("/bindings/{binding_name}", get(get_binding_handler))
@@ -274,6 +275,18 @@ async fn query_handler(
 
 async fn list_sources_handler(State(state): State<AppState>) -> Json<Vec<runtime::SourceSummary>> {
     Json(state.runtime.list_sources().await)
+}
+
+async fn get_adapter_guide_handler(
+    State(state): State<AppState>,
+    Path(source_id): Path<String>,
+) -> Result<Json<runtime::AdapterGuideResponse>, (StatusCode, String)> {
+    state
+        .runtime
+        .get_adapter_guide(&source_id)
+        .await
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
 }
 
 async fn list_bindings_handler(State(state): State<AppState>) -> Json<Vec<String>> {

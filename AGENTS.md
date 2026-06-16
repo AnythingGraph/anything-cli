@@ -4,24 +4,35 @@ Instructions for AI agents using **anythinggraph-thin** MCP to create playbooks 
 
 ## Golden rules
 
-1. **Use compact declarative format only** — never author legacy verbose bindings with raw SQL.
-2. **`propose_*` validates; `save_*` persists** — save the **same YAML/JSON you wrote**, not expanded output from propose responses.
-3. **Never save `debug_compiled_binding_yaml`** — it is omitted by default; when present it is debug-only.
-4. **Profiles are manual** — edit `profiles/local.yaml` yourself; use `list_sources` + `introspect_source` to discover schema.
-5. **Copy demos first** — call `get_binding("crm-payroll-access.postgres")` and `get_binding("crm-payroll-access.csv")` before authoring new bindings.
+1. **Use MCP tools only** — when connected to **anythinggraph-thin** MCP, call tools (`introspect_source`, `query_graph`, etc.). Do **not** use `curl`, `fetch`, or Python scripts against `http://127.0.0.1:8787` unless the user explicitly asks for a standalone script or MCP is unavailable.
+2. **Use compact declarative format only** — never author legacy verbose bindings with raw SQL.
+3. **`propose_*` validates; `save_*` persists** — save the **same YAML/JSON you wrote**, not expanded output from propose responses.
+4. **Never save `debug_compiled_binding_yaml`** — it is omitted by default; when present it is debug-only.
+5. **Profiles are manual** — edit `profiles/local.yaml` yourself; use `list_sources` + `get_adapter_guide` + `introspect_source` to discover schema.
+6. **Use the right template for each adapter** — SQL/CSV: `get_binding("crm-payroll-access.postgres")` and `.csv`. Mongo/REST/SOQL: **`get_adapter_guide(source_id)`** (`example_binding_yaml` + `instructions_markdown`).
+7. **Per-adapter rules live in adapter crates** — call **`get_adapter_guide(source_id)`** after `list_sources`; do not guess binding shape from introspect API params alone.
+8. **`test_binding(execute=true)` before save** — use real identifier values from the live source when possible.
 
 ## Admin workflow
 
 ```
-list_sources → introspect_source(source_id)
+list_sources
+→ get_adapter_guide(source_id)   # once per source you will bind — REQUIRED before propose_binding
+→ introspect_source(source_id, schema_name?)   # schema_name meaning comes from get_adapter_guide
 → propose_playbook → save_playbook
 → get_playbook_context → suggest_bindings
-→ propose_binding → test_binding → save_binding
+→ propose_binding → test_binding(execute=true) → save_binding
 ```
+
+**Discovering `source_id`:** always from `list_sources` (profile keys like `warehouse_pg`, `payroll_csv`). Never invent source ids.
+
+**Adapter-specific binding rules:** returned by `get_adapter_guide` as `instructions_markdown` + `example_binding_yaml`. Source markdown also lives under `crates/adapter-*/AGENTS.md` in the repo.
 
 Reference examples: playbook `crm-payroll-access`, bindings `crm-payroll-access.postgres` / `.csv`.
 
 ## Playbook JSON (compact)
+
+Playbook entities use **`identifier`** (logical id field name) and **`attributes`** (other readable fields). Bindings keep **`id`** / **`fields`** for physical column/property mapping.
 
 ```json
 {
@@ -29,8 +40,8 @@ Reference examples: playbook `crm-payroll-access`, bindings `crm-payroll-access.
   "name": "My playbook",
   "description": "What agents can query.",
   "entities": {
-    "crm_user": { "id": "user_id", "fields": ["full_name"] },
-    "crm_account": { "id": "account_name", "fields": ["industry"] }
+    "crm_user": { "identifier": "user_id", "attributes": ["full_name"] },
+    "crm_account": { "identifier": "account_name", "attributes": ["industry"] }
   },
   "relationships": {
     "owns_account": { "from": "crm_user", "to": "crm_account" }
@@ -50,74 +61,35 @@ Reference examples: playbook `crm-payroll-access`, bindings `crm-payroll-access.
 }
 ```
 
-**Do not use for new playbooks:** `entities[]` arrays, `entity_relationships[]`, `entity_sources` + separate `bindings` map (legacy — still loads, but avoid).
-
 **File:** `playbooks/{id}.json`
 
 ## Binding YAML (compact)
 
-One file per source key: `bindings/{playbook_id}.{source_key}.yaml`
+One file per playbook source key: `bindings/{playbook_id}.{source_key}.yaml`
 
-### Postgres / SQL
+Allowed top-level keys: **`source_id`**, **`entities`**, **`relationships`** only (unless adapter guide says otherwise).
 
-```yaml
-source_id: warehouse_pg
+**Do not author:** `lookup`, `operations`, `adapter`, `playbook_id`, top-level `schema_name`, raw SQL/SOQL/HTTP strings.
 
-entities:
-  crm_user:
-    from: users
-    id: user_id
-    fields: [full_name]
+See **`get_adapter_guide(source_id)`** for what `entities.*.from` means per adapter (SQL table, CSV filename, MongoDB collection, etc.).
 
-  crm_account:
-    from: accounts
-    id: account_name
-    fields: [industry]
+## Adapter pitfalls (compact bindings)
 
-relationships:
-  owns_account:
-    object: crm_account
-    link_column: owner_user_id
-```
+| Adapter | Before `save_binding` |
+|---------|------------------------|
+| **SQL / CSV** | `introspect_source`; map `from` to table/file; demo bindings are good templates |
+| **Mongo / REST / SOQL** | `get_adapter_guide` workflow; do not copy SQL binding shape |
 
-### CSV
+## MCP tools (not HTTP)
 
-Map fields only when the CSV column name differs from the playbook field:
-
-```yaml
-source_id: payroll_csv
-
-entities:
-  payroll_record:
-    from: payroll.csv
-    id: payroll_id
-    fields:
-      user_id: user
-
-relationships:
-  user_has_payroll:
-    object: payroll_record
-    link_column: user
-```
-
-## Do NOT include in new bindings
-
-| Legacy / verbose | Why |
-|------------------|-----|
-| `adapter`, `version`, `playbook_id` at top | Inferred from profile + filename |
-| `id_field` | Use `id` |
-| `lookup:` / `operations:` with SQL | Auto-compiled from declarative fields |
-| `relationships.*.join` + explicit SQL | Use `object` + `link_column` only |
-| `SELECT ...` strings in CSV bindings | CSV adapter uses declarative `from` + `fields` |
-
-## MCP tools
-
-| Tool | Save what |
-|------|-----------|
-| `propose_playbook` | Validates only — read `save_instruction` |
-| `save_playbook` | Your compact JSON (same as proposed input) |
-| `propose_binding` | Validates only — read `save_instruction` |
-| `save_binding` | Your compact YAML + `adapter_suffix` (source key) — **saved verbatim**, not compiled/expanded |
+| Tool | When |
+|------|------|
+| `list_sources` | Discover profile `source_id` + adapter type; read `authoring_next_step` |
+| **`get_adapter_guide`** | **After list_sources, before propose_binding** — per-source binding rules |
+| `introspect_source` | Live schema; `schema_name` meaning is adapter-specific (see guide) |
+| `propose_playbook` / `save_playbook` | Playbook JSON |
+| `suggest_bindings` | Heuristic entity mapping |
+| `propose_binding` / `test_binding` / `save_binding` | Binding YAML |
 
 ## Validate after save
 
@@ -125,7 +97,7 @@ relationships:
 cargo run -p anythinggraph-ag -- validate --playbooks playbooks
 ```
 
-Or reload reasoning-service catalog (restart `./start-all.sh`).
+Or restart `./start-all.sh` after manual file edits.
 
 ## Auth
 

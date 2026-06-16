@@ -13,6 +13,10 @@ use plan_ir::{EntityRef, PlanStep, StepResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+mod authoring;
+
+pub use authoring::authoring_guide;
+
 pub struct MongoDbAdapter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,10 +57,10 @@ impl DataAdapter for MongoDbAdapter {
                 let entity_binding = binding.entities.get(entity).ok_or_else(|| {
                     AdapterError::MissingEntityBinding(entity.clone())
                 })?;
-                let lookup_key = if by_field == "full_name" {
-                    "by_name"
-                } else {
+                let lookup_key = if by_field.as_str() == entity_binding.id_field {
                     "by_identifier"
+                } else {
+                    "by_name"
                 };
                 let operation_template = entity_binding.lookup.get(lookup_key).ok_or_else(|| {
                     AdapterError::MissingOperation(format!("{entity}.{lookup_key}"))

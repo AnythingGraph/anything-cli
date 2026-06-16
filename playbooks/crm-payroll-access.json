@@ -4,16 +4,16 @@
   "description": "Sales users and accounts in Postgres; payroll history in a CSV file. One playbook, two bindings (postgres + csv).",
   "entities": {
     "crm_user": {
-      "id": "user_id",
-      "fields": ["full_name"]
+      "identifier": "user_id",
+      "attributes": ["full_name"]
     },
     "crm_account": {
-      "id": "account_name",
-      "fields": ["industry"]
+      "identifier": "account_name",
+      "attributes": ["industry"]
     },
     "crm_payroll_record": {
-      "id": "payroll_id",
-      "fields": ["user_id", "pay_period", "gross_pay", "currency", "pay_date"]
+      "identifier": "payroll_id",
+      "attributes": ["user_id", "pay_period", "gross_pay", "currency", "pay_date"]
     }
   },
   "relationships": {

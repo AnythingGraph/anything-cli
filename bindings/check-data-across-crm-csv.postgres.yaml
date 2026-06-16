@@ -1,0 +1,19 @@
+source_id: warehouse_pg
+
+entities:
+  crm_user:
+    from: users
+    id: user_id
+    fields:
+      full_name: full_name
+
+  crm_account:
+    from: accounts
+    id: account_name
+    fields:
+      industry: industry
+
+relationships:
+  owns_account:
+    object: crm_account
+    link_column: owner_user_id

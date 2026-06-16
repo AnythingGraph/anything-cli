@@ -1,0 +1,24 @@
+source_id: payroll_csv
+
+entities:
+  crm_user:
+    from: payroll.csv
+    id: user_id
+    fields:
+      user_id: user
+      full_name: full_name
+
+  payroll_record:
+    from: payroll.csv
+    id: payroll_id
+    fields:
+      user_id: user
+      currency: currency
+      pay_period: pay_period
+      pay_date: pay_date
+      gross_pay: gross_pay
+
+relationships:
+  received_payroll:
+    object: payroll_record
+    link_column: user

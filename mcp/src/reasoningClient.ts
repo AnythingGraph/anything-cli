@@ -68,6 +68,15 @@ export async function listSources(): Promise<Record<string, unknown>> {
   return parseJsonResponse(response, 'list sources');
 }
 
+// Fetch per-adapter binding authoring guide for a profile source id.
+export async function getAdapterGuide(sourceId: string): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${getReasoningBaseUrl()}/sources/${encodeURIComponent(sourceId)}/adapter-guide`,
+    { headers: buildRequestHeaders() },
+  );
+  return parseJsonResponse(response, 'get adapter guide');
+}
+
 // List loaded binding file stems.
 export async function listBindings(): Promise<Record<string, unknown>> {
   const response = await fetch(`${getReasoningBaseUrl()}/bindings`, {
