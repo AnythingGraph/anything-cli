@@ -170,6 +170,60 @@ impl DataAdapter for MongoDbAdapter {
                     adapter: Some(self.adapter_type().to_string()),
                 })
             }
+            PlanStep::ListEntity {
+                entity,
+                limit,
+                sample,
+            } => {
+                let entity_binding = binding.entities.get(entity).ok_or_else(|| {
+                    AdapterError::MissingEntityBinding(entity.clone())
+                })?;
+                let operation_template = entity_binding
+                    .operations
+                    .get("list_entity")
+                    .ok_or_else(|| {
+                        AdapterError::MissingOperation(format!("{entity}.operations.list_entity"))
+                    })?;
+                let operation = parse_mongo_operation(operation_template)?;
+                let filter = build_mongo_filter(&operation.filter_json, "", Some(u64::from(*limit)))?;
+                let physical_rows = run_mongo_find(
+                    context,
+                    &operation.collection_name,
+                    filter,
+                    Some(u64::from(*limit)),
+                )
+                .await?;
+
+                let mut mapped_rows = Vec::new();
+                for row_value in physical_rows {
+                    if let Some(row_object) = row_value.as_object() {
+                        let physical_map: HashMap<String, Value> = row_object
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect();
+                        mapped_rows.push(row_map_to_json(map_row_to_playbook_fields(
+                            physical_map,
+                            entity_binding,
+                        )));
+                    }
+                }
+                let row_count = mapped_rows.len() as u64;
+                let op_name = if *sample {
+                    "sample_entity".to_string()
+                } else {
+                    "list_entity".to_string()
+                };
+
+                Ok(StepResult {
+                    step_index,
+                    op: op_name,
+                    entity_ref: None,
+                    count: Some(row_count),
+                    rows: Some(mapped_rows),
+                    source_query: Some(operation_template.clone()),
+                    adapter: Some(self.adapter_type().to_string()),
+                })
+            }
         }
     }
 
@@ -369,4 +423,62 @@ pub async fn introspect_mongodb_schema(
         database: database_name,
         collections: collection_names,
     })
+}
+
+// Return up to `limit` raw documents from one collection (read-only discovery; no playbook).
+pub async fn sample_mongodb_collection(
+    dsn: &str,
+    database_name: Option<&str>,
+    collection_name: &str,
+    limit: u32,
+) -> Result<(String, Vec<Value>), AdapterError> {
+    if collection_name.trim().is_empty() {
+        return Err(AdapterError::Message("collection name is required".into()));
+    }
+
+    let database_name = database_name
+        .map(|value| value.to_string())
+        .or_else(|| std::env::var("AG_MONGODB_DATABASE").ok())
+        .unwrap_or_else(|| "anythinggraph".to_string());
+
+    let source_query = format!("find:{collection_name}:{{}}:limit={limit}");
+    let (client, _) = connect_mongo_client_for_dsn(dsn, &database_name).await?;
+    let collection = client
+        .database(&database_name)
+        .collection::<Document>(collection_name);
+
+    let mut cursor = collection
+        .find(doc! {})
+        .limit(limit as i64)
+        .await
+        .map_err(|error| AdapterError::Message(format!("mongodb find failed: {error}")))?;
+
+    let mut rows = Vec::new();
+    while cursor
+        .advance()
+        .await
+        .map_err(|error| AdapterError::Message(format!("mongodb cursor failed: {error}")))?
+    {
+        let document = cursor.deserialize_current().map_err(|error| {
+            AdapterError::Message(format!("mongodb deserialize failed: {error}"))
+        })?;
+        rows.push(bson_document_to_json(&document));
+    }
+
+    Ok((source_query, rows))
+}
+
+// Connect to MongoDB for source-level sampling helpers.
+async fn connect_mongo_client_for_dsn(
+    dsn: &str,
+    database_name: &str,
+) -> Result<(Client, String), AdapterError> {
+    let _ = database_name;
+    let client_options = ClientOptions::parse(dsn)
+        .await
+        .map_err(|error| AdapterError::Message(format!("mongodb parse dsn failed: {error}")))?;
+    let client = Client::with_options(client_options).map_err(|error| {
+        AdapterError::Message(format!("mongodb client init failed: {error}"))
+    })?;
+    Ok((client, database_name.to_string()))
 }

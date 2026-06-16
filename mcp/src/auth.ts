@@ -18,8 +18,17 @@ function parseTokenList(rawValue: string | undefined): string[] {
 const adminTokens = parseTokenList(process.env.AG_ADMIN_TOKENS);
 const userTokens = parseTokenList(process.env.AG_USER_TOKENS);
 
+// True when AG_AUTH_DISABLED is set (local dev — no bearer token required).
+function isAuthDisabled(): boolean {
+  const rawValue = process.env.AG_AUTH_DISABLED?.trim().toLowerCase();
+  return rawValue === '1' || rawValue === 'true' || rawValue === 'yes';
+}
+
 // True when at least one auth token is configured for MCP or reasoning-service.
 export function isAuthRequired(): boolean {
+  if (isAuthDisabled()) {
+    return false;
+  }
   return adminTokens.length > 0 || userTokens.length > 0;
 }
 
@@ -82,6 +91,8 @@ export const USER_MCP_TOOLS = [
   'health_check',
   'list_playbooks',
   'get_playbook_context',
+  'list_entity',
+  'sample_entity',
   'plan_query',
   'execute_plan',
   'query_graph',
@@ -95,6 +106,7 @@ export const ADMIN_MCP_TOOLS = [
   'list_bindings',
   'get_binding',
   'introspect_source',
+  'sample_source',
   'suggest_bindings',
   'propose_binding',
   'test_binding',

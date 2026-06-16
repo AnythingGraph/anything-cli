@@ -13,6 +13,12 @@ export AG_MCP_HOST="${AG_MCP_HOST:-127.0.0.1}"
 export AG_MCP_PORT="${AG_MCP_PORT:-3334}"
 export AG_PAYROLL_CSV_PATH="${AG_PAYROLL_CSV_PATH:-$ROOT_DIR/data/payroll.csv}"
 
+# Local dev: skip bearer auth unless explicitly re-enabled (AG_AUTH_DISABLED=0 + tokens).
+export AG_AUTH_DISABLED="${AG_AUTH_DISABLED:-1}"
+if [[ "${AG_AUTH_DISABLED}" == "1" || "${AG_AUTH_DISABLED}" == "true" || "${AG_AUTH_DISABLED}" == "yes" ]]; then
+  unset AG_ADMIN_TOKENS AG_USER_TOKENS AG_MCP_AUTH_TOKEN
+fi
+
 REASONING_PID=""
 MCP_PID=""
 
@@ -132,6 +138,11 @@ echo ""
 echo "ag-cli is running:"
 echo "  reasoning-service  ${AG_REASONING_URL}"
 echo "  MCP endpoint       http://${AG_MCP_HOST}:${AG_MCP_PORT}/mcp"
+if [[ "${AG_AUTH_DISABLED}" == "1" || "${AG_AUTH_DISABLED}" == "true" || "${AG_AUTH_DISABLED}" == "yes" ]]; then
+  echo "  MCP auth           disabled (AG_AUTH_DISABLED)"
+else
+  echo "  MCP auth           enabled (Bearer token required)"
+fi
 echo "  payroll CSV        ${AG_PAYROLL_CSV_PATH}"
 echo ""
 echo "Press Ctrl+C to stop both services."

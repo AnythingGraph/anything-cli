@@ -8,10 +8,22 @@ Instructions for AI agents using **anythinggraph-thin** MCP to create playbooks 
 2. **Use compact declarative format only** — never author legacy verbose bindings with raw SQL.
 3. **`propose_*` validates; `save_*` persists** — save the **same YAML/JSON you wrote**, not expanded output from propose responses.
 4. **Never save `debug_compiled_binding_yaml`** — it is omitted by default; when present it is debug-only.
-5. **Profiles are manual** — edit `profiles/local.yaml` yourself; use `list_sources` + `get_adapter_guide` + `introspect_source` to discover schema.
+5. **Profiles are manual** — edit `profiles/local.yaml` yourself; use `list_sources` + `get_adapter_guide` + `introspect_source` + `sample_source` to discover schema and example data.
 6. **Use the right template for each adapter** — SQL/CSV: `get_binding("crm-payroll-access.postgres")` and `.csv`. Mongo/REST/SOQL: **`get_adapter_guide(source_id)`** (`example_binding_yaml` + `instructions_markdown`).
 7. **Per-adapter rules live in adapter crates** — call **`get_adapter_guide(source_id)`** after `list_sources`; do not guess binding shape from introspect API params alone.
 8. **`test_binding(execute=true)` before save** — use real identifier values from the live source when possible.
+
+## Exploring a source (no playbook)
+
+When the user asks what data lives in a source (e.g. “what’s in `mongo_main`?”):
+
+```
+list_sources
+→ introspect_source(source_id, schema_name?)   # collections / tables / columns
+→ sample_source(source_id, resource=<table|collection|object>, limit=5)   # raw example rows
+```
+
+Do **not** call `list_playbooks` for source exploration. Playbooks are only needed once you map entities and run `query_graph`.
 
 ## Admin workflow
 
@@ -87,9 +99,13 @@ See **`get_adapter_guide(source_id)`** for what `entities.*.from` means per adap
 | `list_sources` | Discover profile `source_id` + adapter type; read `authoring_next_step` |
 | **`get_adapter_guide`** | **After list_sources, before propose_binding** — per-source binding rules |
 | `introspect_source` | Live schema; `schema_name` meaning is adapter-specific (see guide) |
+| `sample_source` | Raw row preview from one table/collection/object — **no playbook** |
 | `propose_playbook` / `save_playbook` | Playbook JSON |
 | `suggest_bindings` | Heuristic entity mapping |
 | `propose_binding` / `test_binding` / `save_binding` | Binding YAML |
+| `list_entity` | Browse rows for one entity (default limit 1000) — no lookup sweep |
+| `sample_entity` | Small row sample for discovery (default limit 5) |
+| `query_graph` | Resolve entity + optional relationship count/list |
 
 ## Validate after save
 
@@ -101,6 +117,6 @@ Or restart `./start-all.sh` after manual file edits.
 
 ## Auth
 
-Admin token required for authoring tools. User token is query-only (`query_graph`, `list_allowed_rows`).
+Admin token required for authoring tools. User token is query-only (`query_graph`, `list_entity`, `sample_entity`, `list_allowed_rows`).
 
 See [README.md](README.md) for `AG_ADMIN_TOKENS` / `AG_USER_TOKENS` setup.

@@ -16,8 +16,8 @@ pub use compile::{
 pub use read_only::{read_only_query_violation, validate_read_only_binding_queries};
 pub use normalize::{
     finalize_binding, infer_adapter_from_binding_stem, infer_binding_adapter,
-    merge_entity_fields_from_playbook, normalize_relationship_bindings,
-    playbook_id_from_binding_stem,
+    merge_entity_fields_from_playbook, merge_relationships_from_playbook,
+    normalize_relationship_bindings, playbook_id_from_binding_stem,
 };
 
 #[derive(Debug, Error)]
@@ -219,6 +219,7 @@ pub fn resolve_adapter_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::fs;
 
     #[test]
@@ -254,5 +255,108 @@ relationships:
         assert!(!written.contains("SELECT"));
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn merge_relationships_injects_object_entity_join_on_identifier() {
+        let playbook = playbook_spec::PlaybookDefinition {
+            id: "demo".into(),
+            name: "Demo".into(),
+            description: String::new(),
+            category: String::new(),
+            instructions: None,
+            entities: vec![
+                playbook_spec::PlaybookEntity {
+                    name: "customer".into(),
+                    display_name: "Customer".into(),
+                    fields: vec![playbook_spec::PlaybookField {
+                        field_name: "user_id".into(),
+                        field_type: String::new(),
+                        is_identifier: true,
+                    }],
+                },
+                playbook_spec::PlaybookEntity {
+                    name: "crm_user".into(),
+                    display_name: "CRM user".into(),
+                    fields: vec![playbook_spec::PlaybookField {
+                        field_name: "user_id".into(),
+                        field_type: String::new(),
+                        is_identifier: true,
+                    }],
+                },
+            ],
+            entity_relationships: vec![playbook_spec::PlaybookEntityRelationship {
+                relationship_name: "same_person".into(),
+                subject_entity_name: "customer".into(),
+                object_entity_name: "crm_user".into(),
+                join_on: None,
+            }],
+            relationship_access_rules: None,
+            entity_sources: None,
+            bindings: None,
+            default_binding: None,
+            field_mappings: None,
+        };
+
+        let mut postgres_binding = PlaybookBinding {
+            adapter: "sql".into(),
+            version: 0,
+            playbook_id: None,
+            source_id: None,
+            entities: HashMap::from([(
+                "crm_user".into(),
+                EntityBinding {
+                    from: Some("users".into()),
+                    id_field: "user_id".into(),
+                    fields: HashMap::from([("user_id".into(), "user_id".into())]),
+                    lookup: HashMap::new(),
+                    operations: HashMap::new(),
+                },
+            )]),
+            relationships: HashMap::new(),
+        };
+
+        merge_relationships_from_playbook(&mut postgres_binding, &playbook);
+        compile_binding_queries(&mut postgres_binding);
+
+        let relationship = postgres_binding
+            .relationships
+            .get("same_person")
+            .expect("relationship should be injected");
+        assert_eq!(
+            relationship.subject_link_column.as_deref(),
+            Some("user_id")
+        );
+        assert!(relationship
+            .operations
+            .contains_key("count_for_subject"));
+    }
+
+    #[test]
+    fn compile_binding_adds_list_entity_operation() {
+        let mut binding = PlaybookBinding {
+            adapter: "sql".into(),
+            version: 0,
+            playbook_id: None,
+            source_id: None,
+            entities: HashMap::from([(
+                "crm_user".into(),
+                EntityBinding {
+                    from: Some("users".into()),
+                    id_field: "user_id".into(),
+                    fields: HashMap::from([("user_id".into(), "user_id".into())]),
+                    lookup: HashMap::new(),
+                    operations: HashMap::new(),
+                },
+            )]),
+            relationships: HashMap::new(),
+        };
+
+        compile_binding_queries(&mut binding);
+        let list_entity = binding.entities["crm_user"]
+            .operations
+            .get("list_entity")
+            .expect("list_entity operation");
+        assert!(list_entity.contains("LIMIT :limit"));
     }
 }

@@ -133,6 +133,23 @@ pub fn apply_rebac_to_step(
             );
             Ok(())
         }
+        PlanStep::ListEntity { entity, .. } => {
+            let allowed_ids =
+                evaluator.allowed_row_ids(subject, RebacAction::Read, entity);
+
+            if let Some(rows) = step_result.rows.as_mut() {
+                *rows = filter_rows_by_allowed_ids(rows, entity, &allowed_ids, rebac_state);
+            }
+
+            step_result.count = Some(
+                step_result
+                    .rows
+                    .as_ref()
+                    .map(|rows| rows.len() as u64)
+                    .unwrap_or(0),
+            );
+            Ok(())
+        }
     }
 }
 

@@ -150,6 +150,53 @@ impl DataAdapter for GenericSqlAdapter {
                     adapter: Some(self.adapter_type().to_string()),
                 })
             }
+            PlanStep::ListEntity {
+                entity,
+                limit,
+                sample,
+            } => {
+                let entity_binding = binding.entities.get(entity).ok_or_else(|| {
+                    AdapterError::MissingEntityBinding(entity.clone())
+                })?;
+                let query_template = entity_binding
+                    .operations
+                    .get("list_entity")
+                    .ok_or_else(|| {
+                        AdapterError::MissingOperation(format!("{entity}.operations.list_entity"))
+                    })?;
+                let query_text =
+                    bind_query_placeholders(query_template, "", Some(u64::from(*limit)), None);
+                let physical_rows = run_sql_query(self.dialect, context, &query_text).await?;
+                let mut mapped_rows = Vec::new();
+                for row_value in physical_rows {
+                    if let Some(row_object) = row_value.as_object() {
+                        let physical_map: HashMap<String, Value> = row_object
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect();
+                        mapped_rows.push(row_map_to_json(map_row_to_playbook_fields(
+                            physical_map,
+                            entity_binding,
+                        )));
+                    }
+                }
+                let row_count = mapped_rows.len() as u64;
+                let op_name = if *sample {
+                    "sample_entity".to_string()
+                } else {
+                    "list_entity".to_string()
+                };
+
+                Ok(StepResult {
+                    step_index,
+                    op: op_name,
+                    entity_ref: None,
+                    count: Some(row_count),
+                    rows: Some(mapped_rows),
+                    source_query: Some(query_text),
+                    adapter: Some(self.adapter_type().to_string()),
+                })
+            }
         }
     }
 
@@ -241,6 +288,15 @@ pub async fn run_sql_query(
         .as_ref()
         .ok_or_else(|| AdapterError::Message("sql adapter requires dsn in profile".into()))?;
 
+    run_sql_query_on_dsn(dialect, dsn, query_text).await
+}
+
+// Run one SQL query against a DSN (used for source-level sampling without ExecContext).
+pub async fn run_sql_query_on_dsn(
+    dialect: SqlDialect,
+    dsn: &str,
+    query_text: &str,
+) -> Result<Vec<Value>, AdapterError> {
     match dialect {
         SqlDialect::Postgres => run_postgres_query(dsn, query_text).await,
         SqlDialect::Mysql => run_mysql_query(dsn, query_text).await,

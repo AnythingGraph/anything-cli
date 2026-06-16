@@ -133,7 +133,7 @@ async function main() {
     if (isAuthRequired()) {
       console.error('[anythinggraph-thin-mcp-http] auth enabled — clients must send Authorization: Bearer token');
     } else {
-      console.error('[anythinggraph-thin-mcp-http] auth disabled — set AG_ADMIN_TOKENS / AG_USER_TOKENS for production');
+      console.error('[anythinggraph-thin-mcp-http] auth disabled — set AG_AUTH_DISABLED=0 and AG_ADMIN_TOKENS / AG_USER_TOKENS to enable');
     }
   });
 }

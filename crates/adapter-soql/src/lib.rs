@@ -1,7 +1,9 @@
 mod introspect;
+mod sample;
 mod authoring;
 
 pub use introspect::introspect_salesforce_schema;
+pub use sample::sample_salesforce_object;
 pub use authoring::authoring_guide;
 
 use adapter_core::{AdapterError, DataAdapter, ExecContext, ExecutionState, map_row_to_playbook_fields, row_map_to_json};
@@ -176,6 +178,52 @@ impl DataAdapter for SoqlAdapter {
                     entity_ref: None,
                     count: None,
                     rows: Some(query_result.records),
+                    source_query: Some(soql),
+                    adapter: Some(self.adapter_type().to_string()),
+                })
+            }
+            PlanStep::ListEntity {
+                entity,
+                limit,
+                sample,
+            } => {
+                let entity_binding = binding.entities.get(entity).ok_or_else(|| {
+                    AdapterError::MissingEntityBinding(entity.clone())
+                })?;
+                let query_template = entity_binding
+                    .operations
+                    .get("list_entity")
+                    .ok_or_else(|| {
+                        AdapterError::MissingOperation(format!("{entity}.operations.list_entity"))
+                    })?;
+                let soql = query_template.replace(":limit", &limit.to_string());
+                let query_result = run_soql_query(context, &self.http_client, &soql).await?;
+                let mut mapped_rows = Vec::new();
+                for record in query_result.records {
+                    if let Some(row_object) = record.as_object() {
+                        let physical_map: HashMap<String, Value> = row_object
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect();
+                        mapped_rows.push(row_map_to_json(map_row_to_playbook_fields(
+                            physical_map,
+                            entity_binding,
+                        )));
+                    }
+                }
+                let row_count = mapped_rows.len() as u64;
+                let op_name = if *sample {
+                    "sample_entity".to_string()
+                } else {
+                    "list_entity".to_string()
+                };
+
+                Ok(StepResult {
+                    step_index,
+                    op: op_name,
+                    entity_ref: None,
+                    count: Some(row_count),
+                    rows: Some(mapped_rows),
                     source_query: Some(soql),
                     adapter: Some(self.adapter_type().to_string()),
                 })

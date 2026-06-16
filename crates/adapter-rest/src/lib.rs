@@ -161,6 +161,54 @@ impl DataAdapter for RestAdapter {
                     adapter: Some(self.adapter_type().to_string()),
                 })
             }
+            PlanStep::ListEntity {
+                entity,
+                limit,
+                sample,
+            } => {
+                let entity_binding = binding.entities.get(entity).ok_or_else(|| {
+                    AdapterError::MissingEntityBinding(entity.clone())
+                })?;
+                let operation_template = entity_binding
+                    .operations
+                    .get("list_entity")
+                    .ok_or_else(|| {
+                        AdapterError::MissingOperation(format!("{entity}.operations.list_entity"))
+                    })?;
+                let operation = parse_rest_operation(operation_template)?;
+                let physical_rows =
+                    run_rest_request(context, &operation, "", Some(u64::from(*limit))).await?;
+
+                let mut mapped_rows = Vec::new();
+                for row_value in physical_rows {
+                    if let Some(row_object) = row_value.as_object() {
+                        let physical_map: HashMap<String, Value> = row_object
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect();
+                        mapped_rows.push(row_map_to_json(map_row_to_playbook_fields(
+                            physical_map,
+                            entity_binding,
+                        )));
+                    }
+                }
+                let row_count = mapped_rows.len() as u64;
+                let op_name = if *sample {
+                    "sample_entity".to_string()
+                } else {
+                    "list_entity".to_string()
+                };
+
+                Ok(StepResult {
+                    step_index,
+                    op: op_name,
+                    entity_ref: None,
+                    count: Some(row_count),
+                    rows: Some(mapped_rows),
+                    source_query: Some(format!("{} {}", operation.method, operation.path_and_query)),
+                    adapter: Some(self.adapter_type().to_string()),
+                })
+            }
         }
     }
 
@@ -373,4 +421,59 @@ pub fn introspect_rest_schema(base_url: &str, resource_paths: Option<&str>) -> R
         base_url: base_url.to_string(),
         resources,
     }
+}
+
+// Return up to `limit` raw rows from one REST resource path (read-only discovery; no playbook).
+pub async fn sample_rest_resource(
+    base_url: &str,
+    auth_token: Option<&str>,
+    resource_path: &str,
+    limit: u32,
+) -> Result<(String, Vec<Value>), AdapterError> {
+    if resource_path.trim().is_empty() {
+        return Err(AdapterError::Message("REST resource path is required".into()));
+    }
+
+    let capped_limit = limit.max(1).min(100);
+    let mut path_and_query = resource_path.trim().to_string();
+    if !path_and_query.contains("limit=") && !path_and_query.contains(":limit") {
+        let separator = if path_and_query.contains('?') { '&' } else { '?' };
+        path_and_query = format!("{path_and_query}{separator}limit={capped_limit}");
+    } else {
+        path_and_query = path_and_query.replace(":limit", &capped_limit.to_string());
+    }
+
+    let request_url = join_base_url(base_url, &path_and_query);
+    let source_query = format!("GET {request_url}");
+    let client = Client::new();
+    let mut request_builder = client.get(&request_url).header(CONTENT_TYPE, "application/json");
+
+    if let Some(auth_token) = auth_token.filter(|value| !value.trim().is_empty()) {
+        if auth_token.starts_with("Bearer ") {
+            request_builder = request_builder.header(AUTHORIZATION, auth_token);
+        } else {
+            request_builder =
+                request_builder.header(AUTHORIZATION, format!("Bearer {auth_token}"));
+        }
+    }
+
+    let response = request_builder
+        .send()
+        .await
+        .map_err(|error| AdapterError::Message(format!("rest sample request failed: {error}")))?;
+
+    if !response.status().is_success() {
+        return Err(AdapterError::Message(format!(
+            "rest sample returned status {}",
+            response.status()
+        )));
+    }
+
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|error| AdapterError::Message(format!("rest sample parse failed: {error}")))?;
+
+    let rows = normalize_rest_payload(payload, Some(capped_limit as u64))?;
+    Ok((source_query, rows))
 }

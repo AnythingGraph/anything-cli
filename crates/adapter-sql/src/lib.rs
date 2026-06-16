@@ -1,5 +1,6 @@
 mod engine;
 mod introspect;
+mod sample;
 mod authoring;
 
 pub use authoring::{mssql_authoring_guide, mysql_authoring_guide, postgres_authoring_guide};
@@ -9,6 +10,7 @@ pub use introspect::{
     introspect_mssql_schema, introspect_mysql_schema, introspect_postgres_schema, SourceSchemaCatalog,
     ColumnSchema, ForeignKeySchema, TableSchema,
 };
+pub use sample::{cap_sample_limit, sample_sql_table, DEFAULT_SOURCE_SAMPLE_LIMIT, MAX_SOURCE_SAMPLE_LIMIT};
 
 pub struct SqlAdapter;
 

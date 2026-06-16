@@ -21,7 +21,8 @@ impl AuthConfig {
     pub fn from_env() -> Self {
         let admin_tokens = parse_token_list(std::env::var("AG_ADMIN_TOKENS").ok());
         let user_tokens = parse_token_list(std::env::var("AG_USER_TOKENS").ok());
-        let auth_required = !admin_tokens.is_empty() || !user_tokens.is_empty();
+        let auth_required =
+            !is_auth_disabled() && (!admin_tokens.is_empty() || !user_tokens.is_empty());
 
         Self {
             auth_required,
@@ -126,6 +127,18 @@ fn parse_token_list(raw_value: Option<String>) -> HashSet<String> {
     tokens
 }
 
+// True when AG_AUTH_DISABLED is set (local dev — no bearer token required).
+fn is_auth_disabled() -> bool {
+    match std::env::var("AG_AUTH_DISABLED")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("1") | Some("true") | Some("yes") => true,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +157,19 @@ mod tests {
             AuthRole::Admin,
             AuthRole::User
         ));
+    }
+
+    #[test]
+    fn auth_disabled_env_skips_token_requirement() {
+        std::env::set_var("AG_AUTH_DISABLED", "1");
+        std::env::set_var("AG_ADMIN_TOKENS", "secret");
+        let config = AuthConfig::from_env();
+        assert!(!config.auth_required);
+        assert_eq!(
+            config.resolve_token(None).expect("admin when disabled"),
+            AuthRole::Admin
+        );
+        std::env::remove_var("AG_AUTH_DISABLED");
+        std::env::remove_var("AG_ADMIN_TOKENS");
     }
 }

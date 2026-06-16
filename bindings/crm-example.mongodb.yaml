@@ -1,0 +1,9 @@
+source_id: mongo_main
+
+entities:
+  crm_user:
+    from: customers
+    id: _id
+    fields:
+      user_id: _id
+      full_name: name

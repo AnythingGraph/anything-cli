@@ -118,6 +118,100 @@ pub fn merge_entity_fields_from_playbook(
     }
 }
 
+// Inject playbook relationships into bindings that own the object entity (cross-source federation).
+pub fn merge_relationships_from_playbook(
+    binding: &mut PlaybookBinding,
+    playbook: &PlaybookDefinition,
+) {
+    for relationship in &playbook.entity_relationships {
+        let object_entity_name = &relationship.object_entity_name;
+        let object_entity_binding = match binding.entities.get(object_entity_name) {
+            Some(value) => value,
+            None => continue,
+        };
+
+        if binding
+            .relationships
+            .contains_key(&relationship.relationship_name)
+        {
+            continue;
+        }
+
+        let join_playbook_field = resolve_relationship_join_field(playbook, relationship);
+        let physical_link_column =
+            physical_field_for_playbook_field(object_entity_binding, &join_playbook_field);
+
+        binding.relationships.insert(
+            relationship.relationship_name.clone(),
+            crate::RelationshipBinding {
+                join: Some(crate::RelationshipJoin {
+                    from_entity: relationship.subject_entity_name.clone(),
+                    to_entity: object_entity_name.clone(),
+                    on: join_playbook_field,
+                }),
+                object: Some(object_entity_name.clone()),
+                link_column: Some(physical_link_column.clone()),
+                subject_link_column: Some(physical_link_column),
+                operations: std::collections::HashMap::new(),
+            },
+        );
+    }
+}
+
+// Pick the playbook field used to join a resolved subject to object rows.
+fn resolve_relationship_join_field(
+    playbook: &PlaybookDefinition,
+    relationship: &playbook_spec::PlaybookEntityRelationship,
+) -> String {
+    if let Some(join_on) = relationship.join_on.as_ref() {
+        let trimmed = join_on.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    identifier_field_for_entity(playbook, &relationship.subject_entity_name)
+        .or_else(|| identifier_field_for_entity(playbook, &relationship.object_entity_name))
+        .unwrap_or_else(|| "id".to_string())
+}
+
+// Return the playbook identifier field name for one entity.
+fn identifier_field_for_entity(playbook: &PlaybookDefinition, entity_name: &str) -> Option<String> {
+    playbook
+        .entities
+        .iter()
+        .find(|entity| entity.name == entity_name)
+        .and_then(|entity| {
+            entity
+                .fields
+                .iter()
+                .find(|field| field.is_identifier)
+                .map(|field| field.field_name.clone())
+        })
+}
+
+// Map a playbook field to the physical column/property on an entity binding.
+fn physical_field_for_playbook_field(
+    entity_binding: &crate::EntityBinding,
+    playbook_field: &str,
+) -> String {
+    entity_binding
+        .fields
+        .get(playbook_field)
+        .cloned()
+        .unwrap_or_else(|| {
+            if entity_binding.id_field == playbook_field {
+                playbook_field.to_string()
+            } else {
+                entity_binding
+                    .fields
+                    .get(&entity_binding.id_field)
+                    .cloned()
+                    .unwrap_or_else(|| entity_binding.id_field.clone())
+            }
+        })
+}
+
 // Finalize binding: infer adapter, normalize shape, merge playbook fields, compile queries.
 pub fn finalize_binding(
     binding: &mut PlaybookBinding,
@@ -133,6 +227,7 @@ pub fn finalize_binding(
 
     if let Some(playbook) = playbook {
         merge_entity_fields_from_playbook(binding, playbook);
+        merge_relationships_from_playbook(binding, playbook);
     }
 
     crate::compile::compile_binding_queries(binding);

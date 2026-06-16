@@ -21,6 +21,7 @@ import {
   runQuery,
   saveBinding,
   savePlaybook,
+  sampleSource,
   setReasoningAuthToken,
   suggestBindings,
   testBinding,
@@ -40,7 +41,8 @@ function buildMcpInstructions(role: McpAuthRole): string {
     '- Playbook identifier/attributes are logical vocabulary; binding id/fields map to physical storage (table/column/property).',
     '- NEVER include: lookup, operations, join, raw SQL/SOQL, adapter, version, playbook_id in bindings.',
     '- SQL/CSV templates: get_binding("crm-payroll-access.postgres") and get_binding("crm-payroll-access.csv").',
-    '- Mongo/REST/SOQL: get_adapter_guide(source_id) → use example_binding_yaml + instructions_markdown; introspect_source before propose_binding.',
+    '- Mongo/REST/SOQL: get_adapter_guide(source_id) → use example_binding_yaml + instructions_markdown; introspect_source + sample_source before propose_binding.',
+    '- Exploring data in a source (no playbook): introspect_source for schema, sample_source(resource=table|collection|object) for example rows.',
     '- propose_playbook / propose_binding validate only. save_* must use YOUR SAME compact input — NOT debug_compiled_binding_yaml.',
   ];
 
@@ -61,7 +63,7 @@ function buildMcpInstructions(role: McpAuthRole): string {
       ...compactAuthoring,
       'Admin onboarding workflow:',
       '1) health_check → list_sources → get_adapter_guide(source_id) for each source you will bind',
-      '2) introspect_source(source_id, schema_name when required)',
+      '2) introspect_source(source_id, schema_name when required) — sample_source(resource=...) for raw row preview',
       '3) propose_playbook → save_playbook → suggest_bindings → propose_binding → test_binding → save_binding',
       '4) Users query with query_graph(playbook_id, subject_id, ...).',
     ].join('\n');
@@ -71,9 +73,62 @@ function buildMcpInstructions(role: McpAuthRole): string {
     ...shared,
     'User workflow:',
     '1) list_playbooks → get_playbook_context(playbook_id)',
-    '2) query_graph(..., subject_id=...) for federated read queries',
+    '2) list_entity / sample_entity to browse rows; query_graph for resolve + relationship counts',
     '3) list_allowed_rows(playbook_id, subject_id) under enforced ReBAC',
   ].join('\n');
+}
+
+// Build reasoning-service query JSON from MCP tool arguments.
+function buildQueryRequestFromToolArgs(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const baseRequest: Record<string, unknown> = {
+    playbook_id: args.playbook_id,
+    subject_id: args.subject_id,
+    binding_name: args.binding_name,
+  };
+
+  if (args.sample_entity === true) {
+    return {
+      ...baseRequest,
+      sample_entity: {
+        entity: args.entity,
+        limit: args.limit,
+      },
+    };
+  }
+
+  if (args.list_entity === true) {
+    return {
+      ...baseRequest,
+      list_entity: {
+        entity: args.entity,
+        limit: args.limit,
+      },
+    };
+  }
+
+  return {
+    ...baseRequest,
+    resolve: {
+      entity: args.entity,
+      by_name: args.by_name,
+      by_identifier: args.by_identifier,
+    },
+    count: args.count_relationship
+      ? {
+          relationship: args.count_relationship,
+          object_entity: args.count_object_entity,
+        }
+      : undefined,
+    list: args.list_relationship
+      ? {
+          relationship: args.list_relationship,
+          object_entity: args.count_object_entity,
+          limit: args.list_limit,
+        }
+      : undefined,
+  };
 }
 
 // Create MCP server wired to Rust reasoning-service HTTP API.
@@ -181,6 +236,29 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
   );
 
   registerRoleTool(
+    'sample_source',
+    'Read a few raw rows from a source table/collection/object — no playbook or binding required',
+    {
+      source_id: z.string().describe('Profile source id from list_sources'),
+      resource: z
+        .string()
+        .optional()
+        .describe('Table, MongoDB collection, Salesforce object, or REST path (optional for CSV)'),
+      schema_name: z.string().optional().describe('SQL schema or MongoDB database when required'),
+      limit: z.number().int().min(1).max(100).optional().describe('Row cap (default 5, max 100)'),
+    },
+    async ({ source_id: sourceId, resource, schema_name: schemaName, limit }) => {
+      const result = await sampleSource(
+        String(sourceId),
+        resource ? String(resource) : undefined,
+        schemaName ? String(schemaName) : undefined,
+        typeof limit === 'number' ? limit : undefined,
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  registerRoleTool(
     'suggest_bindings',
     'Suggest playbook entity to table mappings from introspected schema',
     {
@@ -253,6 +331,7 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
     },
     async (args) => {
       const payload: Record<string, unknown> = {
+        playbook_id: args.playbook_id,
         binding_name: args.binding_name,
         binding_yaml: args.binding_yaml,
         execute: args.execute,
@@ -304,36 +383,16 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
       entity: z.string(),
       by_name: z.string().optional(),
       by_identifier: z.string().optional(),
+      list_entity: z.boolean().optional(),
+      sample_entity: z.boolean().optional(),
+      limit: z.number().optional(),
       count_relationship: z.string().optional(),
       count_object_entity: z.string().optional(),
       list_relationship: z.string().optional(),
       list_limit: z.number().optional(),
     },
     async (args) => {
-      const queryRequest = {
-        playbook_id: args.playbook_id,
-        subject_id: args.subject_id,
-        binding_name: args.binding_name,
-        resolve: {
-          entity: args.entity,
-          by_name: args.by_name,
-          by_identifier: args.by_identifier,
-        },
-        count: args.count_relationship
-          ? {
-              relationship: args.count_relationship,
-              object_entity: args.count_object_entity,
-            }
-          : undefined,
-        list: args.list_relationship
-          ? {
-              relationship: args.list_relationship,
-              object_entity: args.count_object_entity,
-              limit: args.list_limit,
-            }
-          : undefined,
-      };
-      const plan = await compilePlan(queryRequest);
+      const plan = await compilePlan(buildQueryRequestFromToolArgs(args));
       return { content: [{ type: 'text', text: JSON.stringify(plan, null, 2) }] };
     },
   );
@@ -349,6 +408,42 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
   );
 
   registerRoleTool(
+    'list_entity',
+    'List rows for a playbook entity (bounded browse; default limit 1000)',
+    {
+      playbook_id: z.string(),
+      entity: z.string(),
+      limit: z.number().optional(),
+      binding_name: z.string().optional(),
+      subject_id: z.string().optional(),
+    },
+    async (args) => {
+      const proof = await runQuery(
+        buildQueryRequestFromToolArgs({ ...args, list_entity: true }),
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(proof, null, 2) }] };
+    },
+  );
+
+  registerRoleTool(
+    'sample_entity',
+    'Return a small sample of rows for a playbook entity (default limit 5)',
+    {
+      playbook_id: z.string(),
+      entity: z.string(),
+      limit: z.number().optional(),
+      binding_name: z.string().optional(),
+      subject_id: z.string().optional(),
+    },
+    async (args) => {
+      const proof = await runQuery(
+        buildQueryRequestFromToolArgs({ ...args, sample_entity: true }),
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(proof, null, 2) }] };
+    },
+  );
+
+  registerRoleTool(
     'query_graph',
     'Compile and execute a federated read query in one step (proof envelope)',
     {
@@ -358,27 +453,14 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
       entity: z.string(),
       by_name: z.string().optional(),
       by_identifier: z.string().optional(),
+      list_entity: z.boolean().optional().describe('Browse rows for entity instead of resolve lookup'),
+      sample_entity: z.boolean().optional().describe('Small row sample instead of resolve lookup'),
+      limit: z.number().optional(),
       count_relationship: z.string().optional(),
       count_object_entity: z.string().optional(),
     },
     async (args) => {
-      const queryRequest = {
-        playbook_id: args.playbook_id,
-        subject_id: args.subject_id,
-        binding_name: args.binding_name,
-        resolve: {
-          entity: args.entity,
-          by_name: args.by_name,
-          by_identifier: args.by_identifier,
-        },
-        count: args.count_relationship
-          ? {
-              relationship: args.count_relationship,
-              object_entity: args.count_object_entity,
-            }
-          : undefined,
-      };
-      const proof = await runQuery(queryRequest);
+      const proof = await runQuery(buildQueryRequestFromToolArgs(args));
       return { content: [{ type: 'text', text: JSON.stringify(proof, null, 2) }] };
     },
   );

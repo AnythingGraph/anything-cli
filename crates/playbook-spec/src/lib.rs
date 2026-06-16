@@ -64,6 +64,9 @@ pub struct PlaybookEntityRelationship {
     pub relationship_name: String,
     pub subject_entity_name: String,
     pub object_entity_name: String,
+    /// Playbook field used to join subject identifier to object rows (defaults to subject identifier).
+    #[serde(default)]
+    pub join_on: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

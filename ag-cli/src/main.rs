@@ -100,11 +100,13 @@ async fn main() -> Result<()> {
                 playbook_id,
                 subject_id: None,
                 binding_name: Some("postgres".into()),
-                resolve: plan_ir::ResolveEntityRequest {
+                resolve: Some(plan_ir::ResolveEntityRequest {
                     entity: "crm_user".into(),
                     by_name: Some(by_name),
                     by_identifier: None,
-                },
+                }),
+                list_entity: None,
+                sample_entity: None,
                 count: Some(plan_ir::CountRelationshipRequest {
                     relationship,
                     object_entity: Some("crm_account".into()),

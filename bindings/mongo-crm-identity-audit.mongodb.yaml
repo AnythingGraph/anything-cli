@@ -1,0 +1,9 @@
+source_id: mongo_main
+entities:
+  customer:
+    from: customers
+    id: user_id
+    fields:
+      user_id: user_id
+      name: name
+      email: email

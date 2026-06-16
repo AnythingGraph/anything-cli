@@ -1,0 +1,16 @@
+source_id: mongo_main
+
+entities:
+  customer:
+    from: customers
+    id: company
+    fields:
+      name: name
+      age: age
+      region: region
+      account_name: company
+
+relationships:
+  belongs_to_account:
+    object: crm_account
+    link_column: account_name

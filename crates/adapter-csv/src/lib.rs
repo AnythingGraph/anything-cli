@@ -188,6 +188,49 @@ impl DataAdapter for CsvAdapter {
                     adapter: Some(self.adapter_type().to_string()),
                 })
             }
+            PlanStep::ListEntity {
+                entity,
+                limit,
+                sample,
+            } => {
+                let entity_binding = binding.entities.get(entity).ok_or_else(|| {
+                    AdapterError::MissingEntityBinding(entity.clone())
+                })?;
+                let file_path = resolve_csv_file_path(context, entity_binding.from.as_deref())?;
+                let rows = load_csv_rows(&file_path)?;
+                let mut mapped_rows = Vec::new();
+                for row_value in rows.into_iter().take(*limit as usize) {
+                    if let Some(row_object) = row_value.as_object() {
+                        let physical_map: HashMap<String, Value> = row_object
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect();
+                        mapped_rows.push(row_map_to_json(map_row_to_playbook_fields(
+                            physical_map,
+                            entity_binding,
+                        )));
+                    }
+                }
+                let row_count = mapped_rows.len() as u64;
+                let op_name = if *sample {
+                    "sample_entity".to_string()
+                } else {
+                    "list_entity".to_string()
+                };
+
+                Ok(StepResult {
+                    step_index,
+                    op: op_name,
+                    entity_ref: None,
+                    count: Some(row_count),
+                    rows: Some(mapped_rows),
+                    source_query: Some(format!(
+                        "csv:{} list limit {limit}",
+                        file_path.display()
+                    )),
+                    adapter: Some(self.adapter_type().to_string()),
+                })
+            }
         }
     }
 
@@ -235,6 +278,15 @@ pub fn introspect_csv_file(file_path: &Path) -> Result<CsvSchemaCatalog, Adapter
         columns,
         row_count: rows.len(),
     })
+}
+
+// Return up to `limit` raw CSV rows (read-only discovery; no playbook).
+pub fn sample_csv_file(file_path: &Path, limit: u32) -> Result<(String, Vec<Value>), AdapterError> {
+    let rows = load_csv_rows(file_path)?;
+    let capped_limit = limit.max(1).min(100) as usize;
+    let sampled_rows = rows.into_iter().take(capped_limit).collect::<Vec<_>>();
+    let source_query = format!("csv:{} sample limit {capped_limit}", file_path.display());
+    Ok((source_query, sampled_rows))
 }
 
 // Resolve CSV path from profile connection and optional entity file name.

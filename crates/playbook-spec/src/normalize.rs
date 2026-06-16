@@ -288,10 +288,17 @@ fn parse_relationships(
             )));
         }
 
+        let join_on = relationship_value
+            .get("join_on")
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
         relationships.push(PlaybookEntityRelationship {
             relationship_name: relationship_name.clone(),
             subject_entity_name: from.to_string(),
             object_entity_name: to.to_string(),
+            join_on,
         });
     }
 

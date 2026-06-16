@@ -110,6 +110,28 @@ export async function introspectSource(
   return parseJsonResponse(response, 'introspect source');
 }
 
+// Sample raw rows from a table/collection/resource without a playbook or binding.
+export async function sampleSource(
+  sourceId: string,
+  resource?: string,
+  schemaName?: string,
+  limit?: number,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${getReasoningBaseUrl()}/sources/${encodeURIComponent(sourceId)}/sample`,
+    {
+      method: 'POST',
+      headers: buildRequestHeaders(),
+      body: JSON.stringify({
+        resource,
+        schema_name: schemaName,
+        limit,
+      }),
+    },
+  );
+  return parseJsonResponse(response, 'sample source');
+}
+
 // Suggest playbook entity to table mappings from source schema.
 export async function suggestBindings(
   playbookId: string,

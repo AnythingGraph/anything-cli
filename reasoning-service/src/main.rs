@@ -49,6 +49,16 @@ struct IntrospectSourceRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct SampleSourceRequest {
+    #[serde(default)]
+    resource: Option<String>,
+    #[serde(default)]
+    schema_name: Option<String>,
+    #[serde(default)]
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
 struct ProposeBindingRequest {
     binding_yaml: String,
 }
@@ -112,6 +122,14 @@ async fn main() -> anyhow::Result<()> {
 
     if auth.auth_required {
         tracing::info!("reasoning-service auth enabled (AG_ADMIN_TOKENS / AG_USER_TOKENS)");
+    } else if std::env::var("AG_AUTH_DISABLED")
+        .ok()
+        .is_some_and(|value| {
+            let lowered = value.trim().to_ascii_lowercase();
+            lowered == "1" || lowered == "true" || lowered == "yes"
+        })
+    {
+        tracing::warn!("reasoning-service auth disabled (AG_AUTH_DISABLED)");
     } else {
         tracing::warn!(
             "reasoning-service auth disabled — set AG_ADMIN_TOKENS and/or AG_USER_TOKENS for production"
@@ -123,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/sources", get(list_sources_handler))
         .route("/sources/{source_id}/adapter-guide", get(get_adapter_guide_handler))
         .route("/sources/{source_id}/introspect", post(introspect_source_handler))
+        .route("/sources/{source_id}/sample", post(sample_source_handler))
         .route("/bindings", get(list_bindings_handler))
         .route("/bindings/{binding_name}", get(get_binding_handler))
         .route("/playbooks", get(list_playbooks_handler))
@@ -315,6 +334,24 @@ async fn introspect_source_handler(
         .introspect_source(
             &source_id,
             request.schema_name.as_deref(),
+        )
+        .await
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+async fn sample_source_handler(
+    State(state): State<AppState>,
+    Path(source_id): Path<String>,
+    Json(request): Json<SampleSourceRequest>,
+) -> Result<Json<runtime::SampleSourceResponse>, (StatusCode, String)> {
+    state
+        .runtime
+        .sample_source(
+            &source_id,
+            request.resource.as_deref(),
+            request.schema_name.as_deref(),
+            request.limit,
         )
         .await
         .map(Json)

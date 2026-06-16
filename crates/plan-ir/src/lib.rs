@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Default row cap for list_entity when limit is omitted.
+pub const DEFAULT_LIST_ENTITY_LIMIT: u32 = 1000;
+
+/// Default row cap for sample_entity when limit is omitted.
+pub const DEFAULT_SAMPLE_ENTITY_LIMIT: u32 = 5;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryRequest {
     pub playbook_id: String,
@@ -8,7 +14,12 @@ pub struct QueryRequest {
     pub subject_id: Option<String>,
     #[serde(default)]
     pub binding_name: Option<String>,
-    pub resolve: ResolveEntityRequest,
+    #[serde(default)]
+    pub resolve: Option<ResolveEntityRequest>,
+    #[serde(default)]
+    pub list_entity: Option<ListEntityRequest>,
+    #[serde(default)]
+    pub sample_entity: Option<SampleEntityRequest>,
     #[serde(default)]
     pub count: Option<CountRelationshipRequest>,
     #[serde(default)]
@@ -22,6 +33,20 @@ pub struct ResolveEntityRequest {
     pub by_name: Option<String>,
     #[serde(default)]
     pub by_identifier: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListEntityRequest {
+    pub entity: String,
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleEntityRequest {
+    pub entity: String,
+    #[serde(default)]
+    pub limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +82,12 @@ pub enum PlanStep {
         entity: String,
         by_field: String,
         by_value: String,
+    },
+    ListEntity {
+        entity: String,
+        limit: u32,
+        #[serde(default)]
+        sample: bool,
     },
     CountForSubject {
         relationship: String,

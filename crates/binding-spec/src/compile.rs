@@ -38,13 +38,6 @@ fn compile_entity_list_all_queries(binding: &mut PlaybookBinding, adapter_type: 
         collect_object_link_columns(binding);
 
     for (entity_name, entity_binding) in binding.entities.iter_mut() {
-        if entity_binding
-            .operations
-            .contains_key("list_all")
-        {
-            continue;
-        }
-
         let table_name = match entity_binding.from.as_ref() {
             Some(value) if !value.trim().is_empty() => value.trim().to_string(),
             _ => continue,
@@ -65,10 +58,27 @@ fn compile_entity_list_all_queries(binding: &mut PlaybookBinding, adapter_type: 
             }
         }
 
-        entity_binding.operations.insert(
-            "list_all".into(),
-            format_list_all_query(adapter_type, &select_columns, &table_name),
-        );
+        if !entity_binding.operations.contains_key("list_all") {
+            entity_binding.operations.insert(
+                "list_all".into(),
+                format_list_all_query(adapter_type, &select_columns, &table_name),
+            );
+        }
+
+        if !entity_binding.operations.contains_key("list_entity") {
+            entity_binding.operations.insert(
+                "list_entity".into(),
+                format_list_entity_query(adapter_type, &select_columns, &table_name),
+            );
+        }
+    }
+}
+
+// Build dialect-specific list_entity query text (bounded list for browse/sample).
+fn format_list_entity_query(adapter_type: &str, select_columns: &str, table_name: &str) -> String {
+    match adapter_type {
+        "mssql" => format!("SELECT TOP (:limit) {select_columns} FROM {table_name}"),
+        _ => format!("SELECT {select_columns} FROM {table_name} LIMIT :limit"),
     }
 }
 
@@ -322,6 +332,13 @@ fn compile_mongodb_binding_queries(binding: &mut PlaybookBinding) {
             );
         }
 
+        if !entity_binding.operations.contains_key("list_entity") {
+            entity_binding.operations.insert(
+                "list_entity".into(),
+                format!("find:{collection_name}:{{}}:limit=:limit"),
+            );
+        }
+
         let id_field = resolve_physical_field(entity_binding, &entity_binding.id_field);
         if !entity_binding.lookup.contains_key("by_identifier") {
             entity_binding.lookup.insert(
@@ -335,7 +352,7 @@ fn compile_mongodb_binding_queries(binding: &mut PlaybookBinding) {
                 entity_binding.lookup.insert(
                     "by_name".into(),
                     format!(
-                        "find:{collection_name}:{{\"{name_field}\":{{\"$regex\":\"^:name$\",\"$options\":\"i\"}}}}"
+                        "find:{collection_name}:{{\"{name_field}\":{{\"$regex\":\".*:name.*\",\"$options\":\"i\"}}}}"
                     ),
                 );
             }
@@ -402,6 +419,13 @@ fn compile_rest_binding_queries(binding: &mut PlaybookBinding) {
             entity_binding.operations.insert(
                 "list_all".into(),
                 format!("GET {resource_path}"),
+            );
+        }
+
+        if !entity_binding.operations.contains_key("list_entity") {
+            entity_binding.operations.insert(
+                "list_entity".into(),
+                format!("GET {resource_path}?limit=:limit"),
             );
         }
 
@@ -489,6 +513,7 @@ pub fn validate_binding_for_playbook(
     let mut compiled_binding = binding.clone();
     crate::normalize_relationship_bindings(&mut compiled_binding);
     crate::merge_entity_fields_from_playbook(&mut compiled_binding, playbook);
+    crate::merge_relationships_from_playbook(&mut compiled_binding, playbook);
     compile_binding_queries(&mut compiled_binding);
 
     let binding = &compiled_binding;
@@ -514,6 +539,10 @@ pub fn validate_binding_for_playbook(
     }
 
     for relationship in &playbook.entity_relationships {
+        if !binding.entities.contains_key(&relationship.object_entity_name) {
+            continue;
+        }
+
         if !binding.relationships.contains_key(&relationship.relationship_name) {
             warnings.push(format!(
                 "playbook relationship '{}' has no binding operations",

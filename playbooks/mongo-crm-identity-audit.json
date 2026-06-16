@@ -1,0 +1,30 @@
+{
+  "id": "mongo-crm-identity-audit",
+  "name": "Cross-source identity audit (Mongo + Postgres)",
+  "description": "Align MongoDB customers in mongo_main with CRM users in warehouse_pg. Find orphans and linked identities by user_id.",
+  "entities": {
+    "customer": {
+      "identifier": "user_id",
+      "attributes": [
+        "name",
+        "email"
+      ]
+    },
+    "crm_user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    }
+  },
+  "relationships": {
+    "same_person": {
+      "from": "customer",
+      "to": "crm_user"
+    }
+  },
+  "sources": {
+    "customer": "mongodb",
+    "crm_user": "postgres"
+  }
+}

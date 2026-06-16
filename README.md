@@ -316,6 +316,7 @@ cd mcp && AG_REASONING_URL=http://127.0.0.1:8787 AG_ADMIN_TOKENS=admin-secret AG
 | `AG_SQL_DSN` | — | Postgres connection |
 | `AG_SF_INSTANCE_URL` / `AG_SF_ACCESS_TOKEN` | — | Salesforce |
 | `AG_PAYROLL_CSV_PATH` | — | CSV file path |
+| `AG_MONGODB_DSN` / `AG_MONGODB_DATABASE` | — | MongoDB connection and default database |
 | `AG_REASONING_URL` | `http://127.0.0.1:8787` | MCP → reasoning API |
 | `AG_MCP_PORT` | `3334` | MCP HTTP port |
 | `AG_ADMIN_TOKENS` | — | Comma-separated admin bearer tokens |

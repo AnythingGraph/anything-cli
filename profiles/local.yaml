@@ -9,3 +9,7 @@ sources:
   payroll_csv:
     adapter: csv
     file_path: env:AG_PAYROLL_CSV_PATH
+  mongo_main:
+    adapter: mongodb
+    dsn: env:AG_MONGODB_DSN
+    database: env:AG_MONGODB_DATABASE

@@ -1,0 +1,18 @@
+{
+  "id": "customer-access",
+  "name": "Customer access",
+  "description": "Read customers from MongoDB",
+  "entities": {
+    "customer": {
+      "identifier": "customer_id",
+      "attributes": [
+        "name",
+        "email"
+      ]
+    }
+  },
+  "relationships": {},
+  "sources": {
+    "customer": "mongodb"
+  }
+}

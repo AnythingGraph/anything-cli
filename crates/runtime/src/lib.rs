@@ -3,20 +3,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use adapter_core::{build_exec_context, AdapterRegistry, DataAdapter, ExecutionState};
-use adapter_csv::{introspect_csv_file, CsvAdapter};
-use adapter_mongodb::{introspect_mongodb_schema, MongoDbAdapter};
-use adapter_rest::{introspect_rest_schema, RestAdapter};
-use adapter_soql::{introspect_salesforce_schema, SoqlAdapter};
+use adapter_csv::{introspect_csv_file, sample_csv_file, CsvAdapter};
+use adapter_mongodb::{introspect_mongodb_schema, sample_mongodb_collection, MongoDbAdapter};
+use adapter_rest::{introspect_rest_schema, sample_rest_resource, RestAdapter};
+use adapter_soql::{introspect_salesforce_schema, sample_salesforce_object, SoqlAdapter};
 use adapter_sql::{
-    introspect_mssql_schema, introspect_mysql_schema, introspect_postgres_schema, MssqlAdapter,
-    MysqlAdapter, SqlAdapter, SourceSchemaCatalog,
+    cap_sample_limit, introspect_mssql_schema, introspect_mysql_schema, introspect_postgres_schema,
+    sample_sql_table, MssqlAdapter, MysqlAdapter, SqlAdapter, SourceSchemaCatalog, SqlDialect,
+    DEFAULT_SOURCE_SAMPLE_LIMIT,
 };
 use anyhow::{anyhow, Context, Result};
 use binding_spec::{
     finalize_binding, load_binding_from_path, load_binding_from_yaml, load_profile_from_path,
     playbook_binding_path, playbook_binding_stem, playbook_id_from_binding_stem,
     save_binding_authoring_yaml_to_path, suggest_entity_table_mappings, validate_binding_for_playbook,
-    BindingValidationReport, PlaybookBinding, SourceProfile,
+    BindingValidationReport, PlaybookBinding, SourceConnection, SourceProfile,
 };
 use serde::{Deserialize, Serialize};
 use plan_compiler::compile_query_request;
@@ -30,6 +31,7 @@ use proof::ProofEnvelope;
 use tokio::sync::RwLock;
 
 mod rebac_enforce;
+mod federation;
 mod adapter_guides;
 
 pub use adapter_core::AdapterAuthoringGuide;
@@ -179,9 +181,15 @@ impl ReasoningRuntime {
         drop(playbooks);
 
         let rebac_state = rebac_enforce::try_build_rebac_state(self, &playbook).await?;
-        let binding = self.resolve_binding(plan).await?;
-        self.execute_plan_with_binding_and_rebac(plan, &binding, rebac_state.as_ref())
-            .await
+        let step_results =
+            federation::execute_plan_federated(self, &playbook, plan, rebac_state.as_ref()).await?;
+        let rebac_applied = rebac_state.is_some();
+        Ok(proof::build_proof_envelope(
+            plan.playbook_id.clone(),
+            plan.subject_id.clone(),
+            step_results,
+            rebac_applied,
+        ))
     }
 
     // Execute a plan using an explicit binding (used for binding tests).
@@ -518,6 +526,117 @@ impl ReasoningRuntime {
         })
     }
 
+    // Sample raw rows from a configured source without a playbook or binding.
+    pub async fn sample_source(
+        &self,
+        source_id: &str,
+        resource: Option<&str>,
+        schema_name: Option<&str>,
+        limit: Option<u32>,
+    ) -> Result<SampleSourceResponse> {
+        let profile = self.profile.read().await;
+        let connection = profile
+            .sources
+            .get(source_id)
+            .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?;
+
+        let capped_limit = cap_sample_limit(limit.unwrap_or(DEFAULT_SOURCE_SAMPLE_LIMIT));
+
+        let (source_query, rows) = match connection.adapter.as_str() {
+            "sql" => {
+                let table_name = require_sample_resource(resource, "table")?;
+                let dsn = require_dsn(connection, source_id)?;
+                sample_sql_table(
+                    SqlDialect::Postgres,
+                    dsn,
+                    schema_name,
+                    table_name,
+                    capped_limit,
+                )
+                .await
+                .map_err(|error| anyhow!("postgres sample failed: {error}"))?
+            }
+            "mysql" => {
+                let table_name = require_sample_resource(resource, "table")?;
+                let dsn = require_dsn(connection, source_id)?;
+                sample_sql_table(SqlDialect::Mysql, dsn, schema_name, table_name, capped_limit)
+                    .await
+                    .map_err(|error| anyhow!("mysql sample failed: {error}"))?
+            }
+            "mssql" => {
+                let table_name = require_sample_resource(resource, "table")?;
+                let dsn = require_dsn(connection, source_id)?;
+                sample_sql_table(SqlDialect::Mssql, dsn, schema_name, table_name, capped_limit)
+                    .await
+                    .map_err(|error| anyhow!("mssql sample failed: {error}"))?
+            }
+            "soql" => {
+                let object_name = require_sample_resource(resource, "Salesforce object")?;
+                let instance_url = connection
+                    .instance_url
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing instance_url"))?;
+                let access_token = connection
+                    .auth
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing auth token"))?;
+                sample_salesforce_object(instance_url, access_token, object_name, capped_limit)
+                    .await
+                    .map_err(|error| anyhow!("salesforce sample failed: {error}"))?
+            }
+            "csv" => {
+                let file_path = connection
+                    .file_path
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing file_path"))?;
+                sample_csv_file(Path::new(file_path), capped_limit)
+                    .map_err(|error| anyhow!("csv sample failed: {error}"))?
+            }
+            "mongodb" => {
+                let collection_name = require_sample_resource(resource, "collection")?;
+                let dsn = require_dsn(connection, source_id)?;
+                sample_mongodb_collection(
+                    dsn,
+                    connection.database.as_deref().or(schema_name),
+                    collection_name,
+                    capped_limit,
+                )
+                .await
+                .map_err(|error| anyhow!("mongodb sample failed: {error}"))?
+            }
+            "rest" => {
+                let resource_path = require_sample_resource(resource, "resource path")?;
+                let base_url = connection
+                    .base_url
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| anyhow!("source '{source_id}' is missing base_url"))?;
+                sample_rest_resource(
+                    base_url,
+                    connection.auth.as_deref(),
+                    resource_path,
+                    capped_limit,
+                )
+                .await
+                .map_err(|error| anyhow!("rest sample failed: {error}"))?
+            }
+            other => return Err(anyhow!("source sampling not supported for adapter: {other}")),
+        };
+
+        Ok(SampleSourceResponse {
+            source_id: source_id.to_string(),
+            adapter: connection.adapter.clone(),
+            resource: resource.map(|value| value.to_string()),
+            source_query,
+            row_count: rows.len(),
+            limit: capped_limit,
+            rows,
+        })
+    }
+
     // Validate a proposed binding YAML against a playbook without saving.
     pub async fn propose_binding(
         &self,
@@ -587,7 +706,7 @@ impl ReasoningRuntime {
             playbook_id: request.playbook_id.clone(),
             subject_id: None,
             binding_name: request.binding_name.clone(),
-            resolve: plan_ir::ResolveEntityRequest {
+            resolve: Some(plan_ir::ResolveEntityRequest {
                 entity: playbook
                     .entities
                     .first()
@@ -595,7 +714,9 @@ impl ReasoningRuntime {
                     .unwrap_or_else(|| "crm_user".into()),
                 by_name: Some("Alex Anderson".into()),
                 by_identifier: None,
-            },
+            }),
+            list_entity: None,
+            sample_entity: None,
             count: playbook
                 .entity_relationships
                 .first()
@@ -663,6 +784,7 @@ impl ReasoningRuntime {
             .map_err(|error| anyhow!("save binding failed: {error}"))?;
 
         drop(playbooks);
+        drop(profile);
         self.reload_catalog().await?;
 
         Ok(SaveBindingResponse {
@@ -751,34 +873,6 @@ impl ReasoningRuntime {
             tables: catalog.tables,
         })
     }
-
-    async fn resolve_binding(&self, plan: &Plan) -> Result<PlaybookBinding> {
-        let bindings = self.bindings.read().await;
-        let playbooks = self.playbooks.read().await;
-
-        if let Some(binding_name) = plan.binding_name.as_deref() {
-            return bindings
-                .get(binding_name)
-                .cloned()
-                .ok_or_else(|| anyhow!("binding not found: {binding_name}"));
-        }
-
-        let playbook = playbooks
-            .get(&plan.playbook_id)
-            .ok_or_else(|| anyhow!("playbook not found: {}", plan.playbook_id))?;
-
-        let candidate_names = binding_candidates_for_playbook(playbook);
-        for candidate_name in candidate_names {
-            if let Some(binding) = bindings.get(&candidate_name) {
-                return Ok(binding.clone());
-            }
-        }
-
-        bindings
-            .get("postgres")
-            .cloned()
-            .ok_or_else(|| anyhow!("no binding found for playbook '{}'", plan.playbook_id))
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -814,6 +908,17 @@ pub struct IntrospectSourceResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleSourceResponse {
+    pub source_id: String,
+    pub adapter: String,
+    pub resource: Option<String>,
+    pub source_query: String,
+    pub row_count: usize,
+    pub limit: u32,
+    pub rows: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProposeBindingResponse {
     pub playbook_id: String,
     pub binding_name: String,
@@ -834,6 +939,7 @@ pub struct ProposePlaybookResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestBindingRequest {
+    #[serde(default)]
     pub playbook_id: String,
     #[serde(default)]
     pub binding_name: Option<String>,
@@ -883,39 +989,6 @@ pub struct SuggestBindingsResponse {
     pub tables: Vec<adapter_sql::TableSchema>,
 }
 
-// Build binding lookup order for a playbook.
-fn binding_candidates_for_playbook(playbook: &PlaybookDefinition) -> Vec<String> {
-    let mut candidates = Vec::new();
-
-    if let Some(default_binding) = playbook.default_binding.as_ref() {
-        candidates.push(default_binding.clone());
-    }
-
-    if let Some(bindings) = playbook.bindings.as_ref() {
-        for binding_name in bindings.values() {
-            if !candidates.iter().any(|existing| existing == binding_name) {
-                candidates.push(binding_name.clone());
-            }
-        }
-    }
-
-    candidates.push(playbook_binding_stem(&playbook.id, "postgres"));
-    candidates.push(playbook_binding_stem(&playbook.id, "csv"));
-    candidates.push(playbook_binding_stem(&playbook.id, "sql"));
-    candidates.push(playbook_binding_stem(&playbook.id, "salesforce"));
-    candidates.push(playbook_binding_stem(&playbook.id, "soql"));
-
-    if let Some(entity_sources) = playbook.entity_sources.as_ref() {
-        for source_suffix in entity_sources.values() {
-            candidates.push(playbook_binding_stem(&playbook.id, source_suffix));
-        }
-    }
-
-    candidates.push("postgres".into());
-    candidates.push("salesforce".into());
-    candidates
-}
-
 // Derive default saved binding stem from adapter type.
 fn default_binding_name_for_playbook(
     playbook: &PlaybookDefinition,
@@ -939,6 +1012,14 @@ fn default_binding_name_for_playbook(
 
 // Choose which playbook entity drives binding auto-routing.
 fn infer_routing_entity(playbook: &PlaybookDefinition, request: &QueryRequest) -> String {
+    if let Some(list_entity) = request.list_entity.as_ref() {
+        return list_entity.entity.clone();
+    }
+
+    if let Some(sample_entity) = request.sample_entity.as_ref() {
+        return sample_entity.entity.clone();
+    }
+
     if let Some(object_entity) = request
         .count
         .as_ref()
@@ -970,7 +1051,36 @@ fn infer_routing_entity(playbook: &PlaybookDefinition, request: &QueryRequest) -
         }
     }
 
-    request.resolve.entity.clone()
+    request.resolve.as_ref().map(|resolve| resolve.entity.clone()).unwrap_or_else(|| {
+        playbook
+            .entities
+            .first()
+            .map(|entity| entity.name.clone())
+            .unwrap_or_else(|| "crm_user".into())
+    })
+}
+
+// Require a table/collection/resource name for source-level sampling.
+fn require_sample_resource<'a>(
+    resource: Option<&'a str>,
+    resource_label: &str,
+) -> Result<&'a str> {
+    let Some(resource_name) = resource.filter(|value| !value.trim().is_empty()) else {
+        return Err(anyhow!(
+            "{resource_label} name is required — call introspect_source first, then pass resource="
+        ));
+    };
+    Ok(resource_name.trim())
+}
+
+// Read DSN from a profile source connection.
+fn require_dsn<'a>(connection: &'a SourceConnection, source_id: &str) -> Result<&'a str> {
+    connection
+        .dsn
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.as_str())
+        .ok_or_else(|| anyhow!("source '{source_id}' is missing dsn"))
 }
 
 // Resolve default paths relative to ag-cli workspace root.

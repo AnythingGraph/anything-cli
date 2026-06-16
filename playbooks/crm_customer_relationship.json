@@ -1,0 +1,42 @@
+{
+  "id": "crm_customer_relationship",
+  "name": "CRM Customer Relationship",
+  "description": "Postgres CRM users and accounts linked to MongoDB customers. MongoDB company maps to Postgres account_name.",
+  "entities": {
+    "crm_user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    },
+    "crm_account": {
+      "identifier": "account_name",
+      "attributes": [
+        "industry"
+      ]
+    },
+    "customer": {
+      "identifier": "account_name",
+      "attributes": [
+        "name",
+        "age",
+        "region"
+      ]
+    }
+  },
+  "relationships": {
+    "owns_account": {
+      "from": "crm_user",
+      "to": "crm_account"
+    },
+    "belongs_to_account": {
+      "from": "customer",
+      "to": "crm_account"
+    }
+  },
+  "sources": {
+    "crm_user": "postgres",
+    "crm_account": "postgres",
+    "customer": "mongodb"
+  }
+}
