@@ -1,0 +1,14 @@
+source_id: mongo_main
+
+entities:
+  transaction:
+    from: transactions
+    id: _id
+    fields:
+      transaction_id: _id
+      user_id: userID
+      amount: amount
+      currency: currency
+      paymentMethod: paymentMethod
+      status: status
+      sku: sku

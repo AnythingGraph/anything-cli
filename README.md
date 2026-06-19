@@ -70,12 +70,13 @@ crm-payroll-access     user, account, payroll      postgres + csv
 
 ## Try it in 2 minutes
 
-**1. Start the stack**
+**1. Configure credentials and start the stack**
 
 ```bash
-export AG_SQL_DSN="postgres://user:pass@localhost:5432/yourdb"
+cp .env.example .env
+# edit .env — set AG_SQL_DSN and any other sources you use
 chmod +x start-all.sh   # first time only
-./start-all.sh
+./start-all.sh          # loads .env automatically
 ```
 
 **2. Connect MCP in Cursor** — add server URL: `http://127.0.0.1:3334/mcp`
@@ -197,8 +198,8 @@ How to author playbook JSON and binding YAML: **[playbooks/README.md](playbooks/
 cargo build --release
 cd mcp && npm install && cd ..
 
-export AG_SQL_DSN="postgres://user:pass@localhost:5432/yourdb"
-export AG_PAYROLL_CSV_PATH="$(pwd)/data/payroll.csv"
+cp .env.example .env
+# edit .env with your connection strings
 
 ./start-all.sh
 ```
@@ -250,7 +251,10 @@ See **[playbooks/README.md](playbooks/README.md)** for the full authoring walkth
 
 ### Credentials and profiles
 
-Source credentials: `profiles/local.yaml` and env vars (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_*`). Details in the playbooks guide.
+1. **`cp .env.example .env`** — put secrets in `.env` (gitignored). `start-all.sh` loads it automatically.
+2. **`profiles/local.yaml`** — registers named sources with `env:AG_*` references (no secrets in this file).
+
+See `.env.example` for all supported variables. Details in the playbooks guide.
 
 ### Auth roles (one MCP + bearer token)
 

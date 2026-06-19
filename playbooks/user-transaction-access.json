@@ -1,0 +1,34 @@
+{
+  "id": "user-transaction-access",
+  "name": "User transaction access",
+  "description": "Link MongoDB transactions to Postgres CRM users via userID → user_id.",
+  "entities": {
+    "crm_user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    },
+    "transaction": {
+      "identifier": "transaction_id",
+      "attributes": [
+        "user_id",
+        "amount",
+        "currency",
+        "payment_method",
+        "status",
+        "sku"
+      ]
+    }
+  },
+  "relationships": {
+    "made_by_user": {
+      "from": "transaction",
+      "to": "crm_user"
+    }
+  },
+  "sources": {
+    "crm_user": "postgres",
+    "transaction": "mongodb"
+  }
+}

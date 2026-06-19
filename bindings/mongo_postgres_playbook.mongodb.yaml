@@ -1,0 +1,19 @@
+source_id: mongo_main
+
+entities:
+  transaction:
+    from: transactions
+    id: _id
+    fields:
+      transaction_id: _id
+      amount: amount
+      currency: currency
+      status: status
+      payment_method: paymentMethod
+      sku: sku
+      user_id: userID
+
+relationships:
+  made_by_user:
+    object: crm_user
+    link_column: userID

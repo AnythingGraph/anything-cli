@@ -8,7 +8,7 @@ Instructions for AI agents using **anythinggraph-thin** MCP to create playbooks 
 2. **Use compact declarative format only** — never author legacy verbose bindings with raw SQL.
 3. **`propose_*` validates; `save_*` persists** — save the **same YAML/JSON you wrote**, not expanded output from propose responses.
 4. **Never save `debug_compiled_binding_yaml`** — it is omitted by default; when present it is debug-only.
-5. **Profiles are manual** — edit `profiles/local.yaml` yourself; use `list_sources` + `get_adapter_guide` + `introspect_source` + `sample_source` to discover schema and example data.
+5. **Profiles are manual** — edit `profiles/local.yaml` yourself; put secrets in `.env` (copy from `.env.example`, gitignored). Use `list_sources` + `get_adapter_guide` + `introspect_source` + `sample_source` to discover schema and example data.
 6. **Use the right template for each adapter** — SQL/CSV: `get_binding("crm-payroll-access.postgres")` and `.csv`. Mongo/REST/SOQL: **`get_adapter_guide(source_id)`** (`example_binding_yaml` + `instructions_markdown`).
 7. **Per-adapter rules live in adapter crates** — call **`get_adapter_guide(source_id)`** after `list_sources`; do not guess binding shape from introspect API params alone.
 8. **`test_binding(execute=true)` before save** — use real identifier values from the live source when possible.

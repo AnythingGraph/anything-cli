@@ -1,0 +1,41 @@
+{
+  "id": "customer_conversation",
+  "name": "Customer Conversation",
+  "description": "Map MongoDB customers to conversations via conversation_id, and to Postgres CRM users via userID.",
+  "entities": {
+    "customer": {
+      "identifier": "user_id",
+      "attributes": [
+        "name",
+        "conversation_id"
+      ]
+    },
+    "conversation": {
+      "identifier": "conversation_id",
+      "attributes": [
+        "summary"
+      ]
+    },
+    "crm_user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    }
+  },
+  "relationships": {
+    "has_conversation": {
+      "from": "customer",
+      "to": "conversation"
+    },
+    "linked_to_user": {
+      "from": "customer",
+      "to": "crm_user"
+    }
+  },
+  "sources": {
+    "customer": "mongodb",
+    "conversation": "mongodb",
+    "crm_user": "postgres"
+  }
+}

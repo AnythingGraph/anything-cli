@@ -1,0 +1,23 @@
+source_id: mongo_main
+
+entities:
+  customer:
+    from: customers
+    id: userID
+    fields:
+      user_id: userID
+      name: name
+      conversation_id: conversation_id
+
+  conversation:
+    from: conversations
+    id: conversation_id
+    fields:
+      conversation_id: conversation_id
+      summary: summary
+
+relationships:
+  has_conversation:
+    object: conversation
+    link_column: conversation_id
+    subject_link_column: conversation_id

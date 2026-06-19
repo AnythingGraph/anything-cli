@@ -5,6 +5,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+# Load local credentials from .env if present (copy from .env.example — never commit .env).
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+  echo "Loaded environment from .env"
+fi
+
 export AG_WORKSPACE_ROOT="$ROOT_DIR"
 export AG_REASONING_HOST="${AG_REASONING_HOST:-127.0.0.1}"
 export AG_REASONING_PORT="${AG_REASONING_PORT:-8787}"
@@ -89,7 +98,7 @@ kill_existing_services
 
 if [[ -z "${AG_SQL_DSN:-}" ]]; then
   echo "Warning: AG_SQL_DSN is not set — Postgres queries will fail."
-  echo "  export AG_SQL_DSN=\"postgres://user:pass@localhost:5432/yourdb\""
+  echo "  cp .env.example .env   # then set AG_SQL_DSN in .env"
 fi
 
 echo "Starting reasoning-service on ${AG_REASONING_URL} ..."

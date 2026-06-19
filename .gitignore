@@ -1,3 +1,4 @@
 /target/
 /mcp/node_modules/
 /mcp/dist/
+.env

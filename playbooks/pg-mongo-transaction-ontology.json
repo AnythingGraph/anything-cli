@@ -1,0 +1,34 @@
+{
+  "id": "pg-mongo-transaction-ontology",
+  "name": "Postgres + Mongo Transaction Ontology",
+  "description": "Ontology linking MongoDB transactions to Postgres CRM users. Maps transactions.userID to users.user_id.",
+  "entities": {
+    "crm_user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    },
+    "transaction": {
+      "identifier": "transaction_id",
+      "attributes": [
+        "user_id",
+        "amount",
+        "currency",
+        "status",
+        "payment_method",
+        "sku"
+      ]
+    }
+  },
+  "relationships": {
+    "made_by_user": {
+      "from": "transaction",
+      "to": "crm_user"
+    }
+  },
+  "sources": {
+    "crm_user": "postgres",
+    "transaction": "mongodb"
+  }
+}

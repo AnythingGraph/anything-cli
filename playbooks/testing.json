@@ -1,0 +1,31 @@
+{
+  "id": "testing",
+  "entities": {
+    "user": {
+      "identifier": "user_id",
+      "attributes": [
+        "full_name"
+      ]
+    },
+    "transaction": {
+      "identifier": "sku",
+      "attributes": [
+        "currency",
+        "amount",
+        "payment_method",
+        "status",
+        "user_id"
+      ]
+    }
+  },
+  "relationships": {
+    "user_transactions": {
+      "from": "user",
+      "to": "transaction"
+    }
+  },
+  "sources": {
+    "mongodb": "mongo_main",
+    "postgres": "warehouse_pg"
+  }
+}

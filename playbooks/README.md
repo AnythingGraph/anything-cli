@@ -206,7 +206,7 @@ sources:
     auth: env:AG_SF_ACCESS_TOKEN
 ```
 
-Set env vars before starting (`AG_SQL_DSN`, `AG_PAYROLL_CSV_PATH`, `AG_SF_*`, etc.).
+Copy **`../.env.example`** to **`../.env`**, fill in values, then run **`../start-all.sh`** (loads `.env` automatically). See `.env.example` for all `AG_*` variables.
 
 ### 4. File layout
 

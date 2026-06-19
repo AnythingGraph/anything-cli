@@ -1,0 +1,14 @@
+source_id: warehouse_pg
+
+entities:
+  crm_user:
+    from: users
+    id: user_id
+    fields:
+      full_name: full_name
+      user_id: user_id
+
+relationships:
+  made_by_user:
+    object: crm_user
+    link_column: user_id

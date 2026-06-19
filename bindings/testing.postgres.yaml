@@ -1,0 +1,13 @@
+source_id: warehouse_pg
+
+entities:
+  user:
+    from: users
+    id: user_id
+    fields:
+      full_name: full_name
+
+relationships:
+  user_transactions:
+    object: transaction
+    link_column: user_id
