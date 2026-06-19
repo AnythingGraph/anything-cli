@@ -1,160 +1,95 @@
-# AnythingGraph CLI
+# Anything Graph - Reasoning As Code Layer
 
-**A thin semantic layer between your AI agent and your data.**
+**Anything Graph** is a semantic data layer for your AI agents. It addresses the most frustrating questions in agentic AI today:
+```
+🎯 How do I avoid hallucination?
+💸 How do I let my agent read millions of records without burning lots of tokens?
+📖 How do I stop the agent from using the wrong definition of a term?
+🔗 How do I make the agent understand data across many systems?
+🤝 How do I make agent answers consistent across teams?
+🏢 How do I make agents work across different departments?
+🔍 How do I improve retrieval quality in RAG?
+🔒 How do I enforce permissions and access control?
+📋 How do I improve auditability?
+```
 
-Your data stays where it is — Postgres, Salesforce, CSV files, and more. AnythingGraph gives Cursor, Claude, and other agents a **governed way to understand and query** that data, with answers you can trace back to the source.
-
-No data lake. No ETL project. No copy-paste SQL into chat.
+**We believe the answer is not another LLM or another AI orchestration system — it is your data.** You need a lightweight semantic layer between your AI agents and your systems of record. It never moves your data, is not another ETL project, and does not rely on dumping prompts.
 
 ![Anything CLI](https://anythinggraph.com/anythinggraphcli.png)
 
-> **Demo names in this repo:** Playbooks like `crm-payroll-access`, entities like `crm_user`, relationships like `owns_account`, and sample people such as “Alex Anderson” are **illustrative only**. You define your own playbooks, entities, and paths for your domain.
+
+Your data stays where it is — Postgres, Salesforce, CSV files, and more. AnythingGraph gives Cursor, Claude, and other agents a **governed way to understand and query** that data, with answers you can trace back to the source.
+
+---
+## Why agents and AI developers love this
+
+1. **Stable vocabulary** — “customer” and “owns_account” don’t change when IT renames a column (update the binding, not every prompt).
+2. **Federated** — one playbook, many systems; no forcing everything into one database.
+3. **Onboarding loop** — your agent can read your schema, propose a binding, test it, and save — you stay in the loop while the agent does the tedious mapping.
+4. **Reasoning layer** — queries go through a governed path (playbook → plan → source), not raw SQL from chat.
 
 ---
 
-## What you get
 
-| Today | With AnythingGraph |
-|-------|-------------------|
-| Agent guesses table names and writes SQL | Agent reads a **playbook** — your business vocabulary |
-| Data scattered across systems | One question can span **multiple sources** (e.g. CRM in Postgres + payroll in CSV) |
-| “Trust me” answers | **Evidence** — which source was queried and what came back |
-| Every customer re-explains their schema | **Bindings** map your playbook once; reuse forever |
+## How it works
 
----
+### 1. Quick installation
 
-## Three ideas (high level)
+```bash
+npm install -g @anythinggraph/cli@latest
+anythinggraph onboard --install-daemon
+anythinggraph start
+```
 
-### 1. Playbook — the use case
+### 2. Set up your data connections
 
-A playbook describes **what you care about** in business terms — your entities, relationships, and access rules:
+```bash
+# Create .env and add your database credentials.
+cp .env.example .env
+
+chmod +x start-all.sh   # first time only
+./start-all.sh          # loads .env automatically and starts services
+```
+
+We support SQL databases, MongoDB, Salesforce SOQL, CSV, and REST/HTTP JSON APIs as data sources. See the [full documentation](https://www.anythinggraph.com/documentation.html).
+
+### 3. Wire up MCP in your favorite AI agent
+
+```json
+{
+  "mcpServers": {
+    "anythinggraph-thin": {
+      "url": "http://127.0.0.1:3334/mcp"
+    }
+  }
+}
+```
+
+Use [AGENTS.md](https://github.com/AnythingGraph/anything-cli/blob/main/AGENTS.md) in your agent workspace — it lists MCP tools and the compact playbook/binding format.
+
+### 4. Browse your data and create an ontology playbook in natural language
+
+This step has the most impact. Use your AI agent to browse data, define entities and relationships, and set role-based access control — all in natural language.
+
+See the playbook guide: [anythingcli-playbooks-guide.html](https://www.anythinggraph.com/anythingcli-playbooks-guide.html).
+
+The Anything Graph engine does most of the heavy lifting to produce your [ontology playbook and data bindings](https://www.anythinggraph.com/anythingcli-playbooks-guide.html).
+
+### 5. Launch your ontology playbooks to production
+
+Production playbooks provide scoped data access, AI reasoning, and governance. Example prompts:
 
 - *Who is the person or role?*
 - *What records are they responsible for?*
 - *What related data may they see?*
+- *How many accounts does Alex own?*
+- *Show Alex’s payroll history count*
+- *How many payroll records does Alex Anderson have?*
 
-**Demo playbooks** in `playbooks/` (copy and adapt — not prescriptive):
-
-| Playbook | Story |
-|----------|--------|
-| `simple-crm-access` | Sales rep → accounts they own |
-| `crm-payroll-access` | Same rep → accounts **and** payroll history from a CSV file |
-| `salesforce-lead-access` | Salesforce user → leads assigned to them |
-
-Playbooks are **portable**. The same playbook can point at different customer databases via bindings.
-
-### 2. Ontology — the vocabulary
-
-Inside each playbook, an **ontology** is the shared language:
-
-- **Entities** — things in your domain (demo examples use names like `crm_user`, `crm_account`)
-- **Relationships** — how they connect (demo examples: `owns_account`, `user_has_payroll`)
-
-Agents don’t need to know your table layout. They ask in playbook terms; AnythingGraph translates.
-
-### 3. Data bindings — where data actually lives
-
-A **binding** connects playbook concepts to **your** systems:
-
-- Postgres `users` / `accounts` tables
-- A `payroll.csv` file where the user column is named `user` instead of `user_id`
-
-**One playbook, multiple bindings** — e.g. CRM in Postgres, payroll in CSV. The agent picks the right source automatically based on what you’re asking about.
-
-```
-Playbook (what)     →  Ontology (vocabulary)  →  Bindings (where)
-crm-payroll-access     user, account, payroll      postgres + csv
-```
 
 ---
 
-## Try it in 2 minutes
 
-**1. Configure credentials and start the stack**
-
-```bash
-cp .env.example .env
-# edit .env — set AG_SQL_DSN and any other sources you use
-chmod +x start-all.sh   # first time only
-./start-all.sh          # loads .env automatically
-```
-
-**2. Connect MCP in Cursor** — add server URL: `http://127.0.0.1:3334/mcp`
-
-Or print a config snippet:
-
-```bash
-cargo run -p anythinggraph-ag -- mcp-config
-```
-
-**3. Ask your agent** (copy-paste):
-
-> Use anythinggraph-thin MCP. For playbook **crm-payroll-access**, tell me how many accounts and how many payroll records **Alex Anderson** has.
-
-The agent calls **`query_graph`** twice — Postgres for accounts, CSV for payroll — and returns counts with proof.
-
----
-
-## MCP tools — what to ask your agent
-
-Connect **anythinggraph-thin** MCP, then use natural language. Agents should call **MCP tools** (`introspect_source`, `query_graph`, etc.) — not `curl` or Python against port 8787. See **[AGENTS.md](AGENTS.md)**.
-
-These are the high-impact flows:
-
-### Ask questions (most common)
-
-| You say | MCP tool | What happens |
-|---------|----------|--------------|
-| “How many accounts does Alex own?” | `query_graph` | Queries Postgres via playbook |
-| “Show Alex’s payroll history count” | `query_graph` | Queries CSV via playbook |
-| “Is the service up?” | `health_check` | Pings reasoning layer |
-
-**Example prompts**
-
-```
-For playbook crm-payroll-access: how many accounts does Alex Anderson own?
-```
-
-```
-For playbook crm-payroll-access: how many payroll records does Alex Anderson have?
-```
-
-```
-For playbook simple-crm-access: resolve user Alex Anderson and count owned accounts.
-```
-
-### Connect your own data (agent-assisted setup)
-
-| You say | MCP tools used |
-|---------|----------------|
-| “What data sources are configured?” | `list_sources` |
-| “What tables are in my Postgres?” | `introspect_source` |
-| “Map crm-payroll-access to my database” | `get_playbook_context` → `suggest_bindings` → `propose_binding` → `test_binding` → `save_binding` |
-
-**Example prompt**
-
-```
-Using anythinggraph-thin: load playbook crm-payroll-access, inspect my Postgres
-source, suggest how to map entities to my tables, test the binding, and save it.
-```
-
-### Explore before querying
-
-| You say | MCP tool |
-|---------|----------|
-| “What entities are in this playbook?” | `get_playbook_context` |
-| “What bindings exist?” | `list_bindings` |
-
----
-
-## Why agents love this
-
-1. **Stable vocabulary** — “customer” and “owns_account” don’t change when IT renames a column (update the binding, not every prompt).
-2. **Federated** — one playbook, many systems; no forcing everything into one database.
-3. **Onboarding loop** — agent can read your schema, propose a binding, test it, and save — you stay in the loop, the agent does the tedious mapping.
-4. **Reasoning layer** — queries go through a governed path (playbook → plan → source), not raw SQL from chat.
-
----
 
 ## Data adapters
 
@@ -178,7 +113,7 @@ Adapters connect profiles to live systems. **Seven ship today**; more share the 
 | Google Sheets | `google_sheets` | Spreadsheets | Planned |
 | HubSpot | `hubspot` | HubSpot CRM | Planned |
 
-Full adapter reference with introspection notes: **Anything CLI documentation**, section 7 — Data adapters (`website/anythingcli-documentation.html`).
+
 
 ---
 
@@ -211,13 +146,7 @@ cp .env.example .env
 
 `start-all.sh` stops any existing processes on those ports, then starts both services. Press Ctrl+C to stop.
 
-Default environment (override as needed):
-
-| Variable | Default |
-|----------|---------|
-| `AG_PAYROLL_CSV_PATH` | `./data/payroll.csv` |
-| `AG_REASONING_URL` | `http://127.0.0.1:8787` |
-| `AG_MCP_PORT` | `3334` |
+`start-all.sh` sets workspace paths and service URLs automatically. Override any value in `.env` — see [Environment reference](#environment-reference) below.
 
 ### Sample Postgres schema (CRM demos)
 
@@ -258,21 +187,22 @@ See `.env.example` for all supported variables. Details in the playbooks guide.
 
 ### Auth roles (one MCP + bearer token)
 
-Set tokens on **both** reasoning-service and MCP (same values):
+Local dev: `start-all.sh` sets `AG_AUTH_DISABLED=1` by default (no bearer token required). To enable auth, set in `.env`:
 
 ```bash
-export AG_ADMIN_TOKENS="admin-secret-change-me"
-export AG_USER_TOKENS="user-secret-change-me"
+AG_AUTH_DISABLED=0
+AG_ADMIN_TOKENS=admin-secret-change-me
+AG_USER_TOKENS=user-secret-change-me
 ```
 
 Clients send `Authorization: Bearer <token>` on MCP HTTP requests. The token maps to:
 
 | Role | MCP tools | Reasoning HTTP |
 |------|-----------|----------------|
-| **user** | `query_graph`, `list_allowed_rows`, `get_playbook_context`, `list_playbooks`, `plan_query`, `execute_plan`, `health_check` | `/query`, `/plan`, `/execute`, `/rebac/*`, read playbook context |
-| **admin** | All user tools **plus** `list_sources`, `get_adapter_guide`, `introspect_source`, `suggest_bindings`, `propose_binding`, `test_binding`, `save_binding`, `propose_playbook`, `save_playbook`, `list_bindings`, `get_binding` | All endpoints |
+| **user** | `health_check`, `list_playbooks`, `get_playbook_context`, `list_entity`, `sample_entity`, `plan_query`, `execute_plan`, `query_graph`, `list_allowed_rows` | `/query`, `/plan`, `/execute`, `/rebac/*`, read playbook context |
+| **admin** | All user tools **plus** `list_sources`, `get_adapter_guide`, `list_bindings`, `get_binding`, `introspect_source`, `sample_source`, `suggest_bindings`, `propose_binding`, `test_binding`, `save_binding`, `propose_playbook`, `save_playbook` | All endpoints |
 
-When `AG_ADMIN_TOKENS` / `AG_USER_TOKENS` are **unset**, auth is disabled (local dev only).
+When `AG_AUTH_DISABLED=1` or no tokens are configured, auth is disabled (local dev only).
 
 **Profiles are never written via MCP** — edit `profiles/local.yaml` manually. Admin agents use `list_sources` → `get_adapter_guide(source_id)` → `introspect_source` before authoring bindings.
 
@@ -286,16 +216,27 @@ Stdio MCP: set `AG_MCP_AUTH_TOKEN` to an admin or user token from the lists abov
 
 | Tool | Role | Purpose |
 |------|------|---------|
-| `health_check` | user | Service status |
-| `list_playbooks` | user | List loaded playbook ids |
-| `get_playbook_context` | user | Entities, relationships, bindings map |
-| `query_graph` | user | Ask a question (plan + execute + proof) |
-| `list_allowed_rows` | user | ReBAC-visible row ids for a subject |
-| `plan_query` / `execute_plan` | user | Advanced: split plan and execution |
-| `list_sources` / `get_adapter_guide` / `introspect_source` | admin | Discover sources; per-adapter binding rules; live schema |
-| `list_bindings` / `get_binding` | admin | View mappings |
-| `propose_playbook` / `save_playbook` | admin | Author playbook JSON |
-| `suggest_bindings` / `propose_binding` / `test_binding` / `save_binding` | admin | Agent-driven binding onboarding |
+| `health_check` | user | Ping Rust reasoning-service |
+| `list_playbooks` | user | List playbook ids loaded from `playbooks/` |
+| `get_playbook_context` | user | Load playbook schema summary (entities and relationships) |
+| `list_entity` | user | List rows for a playbook entity (bounded browse; default limit 1000) |
+| `sample_entity` | user | Return a small sample of rows for a playbook entity (default limit 5) |
+| `plan_query` | user | Compile a structured federated query into plan IR |
+| `execute_plan` | user | Execute a compiled plan IR via read-only adapters |
+| `query_graph` | user | Compile and execute a federated read query in one step (proof envelope) |
+| `list_allowed_rows` | user | List row identifiers a subject may read under enforced ReBAC rules |
+| `list_sources` | admin | List configured data sources from `profiles/local.yaml` (no secrets) |
+| `get_adapter_guide` | admin | Per-adapter binding authoring guide for a `source_id` — call before `propose_binding` |
+| `list_bindings` | admin | List loaded binding file stems in `bindings/` |
+| `get_binding` | admin | Load one saved binding YAML by stem |
+| `introspect_source` | admin | Read source schema for agent mapping (tables/columns — read-only) |
+| `sample_source` | admin | Read a few raw rows from a source table/collection/object (no playbook required) |
+| `suggest_bindings` | admin | Suggest playbook entity-to-table mappings from introspected schema |
+| `propose_binding` | admin | Validate declarative binding YAML (no SQL) |
+| `test_binding` | admin | Compile a sample query against a proposed or saved binding; optionally execute read-only |
+| `save_binding` | admin | Save declarative binding YAML to `bindings/{playbook_id}.{adapter_suffix}.yaml` |
+| `propose_playbook` | admin | Validate compact playbook JSON |
+| `save_playbook` | admin | Save compact playbook JSON to `playbooks/{playbook_id}.json` |
 
 ### Manual start (alternative)
 
@@ -312,21 +253,54 @@ cd mcp && AG_REASONING_URL=http://127.0.0.1:8787 AG_ADMIN_TOKENS=admin-secret AG
 
 ### Environment reference
 
+Copy `.env.example` to `.env` and edit locally — never commit `.env`. `profiles/local.yaml` references credentials as `env:AG_*`; keep secrets in `.env` only.
+
+**Data source credentials** (used by `profiles/local.yaml`):
+
+| Variable | Example / default | Purpose |
+|----------|-------------------|---------|
+| `AG_SQL_DSN` | `postgres://user:pass@localhost:5432/yourdb` | Postgres — profile key `warehouse_pg` |
+| `AG_PAYROLL_CSV_PATH` | `./data/payroll.csv` | Local CSV — profile key `payroll_csv` |
+| `AG_MONGODB_DSN` | `mongodb://localhost:27017` | MongoDB connection — profile key `mongo_main` |
+| `AG_MONGODB_DATABASE` | `mydb` | MongoDB default database |
+| `AG_SF_INSTANCE_URL` | `https://your-instance.my.salesforce.com` | Salesforce instance URL |
+| `AG_SF_ACCESS_TOKEN` | — | Salesforce OAuth access token |
+| `AG_REST_BASE_URL` | `https://api.example.com` | REST/HTTP JSON API base URL (optional) |
+| `AG_REST_TOKEN` | — | REST API bearer token (optional) |
+
+**Paths and workspace** (`start-all.sh` sets `AG_WORKSPACE_ROOT` to the repo root):
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `AG_PLAYBOOKS_DIR` | `./playbooks` | Playbook JSON catalog |
-| `AG_BINDINGS_DIR` | `./bindings` | Binding YAML files |
-| `AG_PROFILE_PATH` | `./profiles/local.yaml` | Source credentials |
-| `AG_SQL_DSN` | — | Postgres connection |
-| `AG_SF_INSTANCE_URL` / `AG_SF_ACCESS_TOKEN` | — | Salesforce |
-| `AG_PAYROLL_CSV_PATH` | — | CSV file path |
-| `AG_MONGODB_DSN` / `AG_MONGODB_DATABASE` | — | MongoDB connection and default database |
-| `AG_REASONING_URL` | `http://127.0.0.1:8787` | MCP → reasoning API |
+| `AG_WORKSPACE_ROOT` | repo root | Workspace root for playbooks, bindings, and profiles |
+| `AG_PLAYBOOKS_DIR` | `{workspace}/playbooks` | Playbook JSON catalog |
+| `AG_BINDINGS_DIR` | `{workspace}/bindings` | Binding YAML files |
+| `AG_PROFILE_PATH` | `{workspace}/profiles/local.yaml` | Named source profiles (references `env:AG_*`) |
+
+**Services** (optional — defaults work for local dev):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AG_REASONING_HOST` | `127.0.0.1` | Reasoning-service bind host |
+| `AG_REASONING_PORT` | `8787` | Reasoning-service port |
+| `AG_REASONING_URL` | `http://127.0.0.1:8787` | MCP → reasoning API base URL |
+| `AG_MCP_HOST` | `127.0.0.1` | MCP HTTP bind host |
 | `AG_MCP_PORT` | `3334` | MCP HTTP port |
+
+**Auth**:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AG_AUTH_DISABLED` | `1` in `start-all.sh` | Set to `0` to require bearer tokens |
 | `AG_ADMIN_TOKENS` | — | Comma-separated admin bearer tokens |
 | `AG_USER_TOKENS` | — | Comma-separated user bearer tokens |
 | `AG_MCP_AUTH_TOKEN` | — | Default token for stdio MCP (optional) |
-| `AG_DEBUG_COMPILED` | — | Set to `1` to include `debug_compiled_binding_yaml` in propose_binding (debug only) |
+
+**Debug**:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AG_DEBUG_COMPILED` | unset | Set to `1` to include `debug_compiled_binding_yaml` in `propose_binding` responses (debug only) |
 
 ### HTTP API
 
