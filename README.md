@@ -113,7 +113,7 @@ Adapters connect profiles to live systems. **Seven ship today**; more share the 
 | Google Sheets | `google_sheets` | Spreadsheets | Planned |
 | HubSpot | `hubspot` | HubSpot CRM | Planned |
 
-(See how to connect your data sources)[https://anythinggraph.com/connect-data.html]
+[See how to connect your data sources](https://anythinggraph.com/connect-data.html)
 
 ---
 
