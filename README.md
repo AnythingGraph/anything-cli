@@ -1,4 +1,4 @@
-# Anything Graph - Reasoning As Code Layer
+# Anything Graph - Policy As Code Layer
 
 **Anything Graph** is a semantic data layer for your AI agents. It addresses the most frustrating questions in agentic AI today:
 
