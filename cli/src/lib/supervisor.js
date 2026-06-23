@@ -120,6 +120,27 @@ function startMcpService(config, childRecords, logDirectory) {
   return childProcess;
 }
 
+// Return a promise that rejects when a child process exits before services are ready.
+function waitForChildProcessStart(childProcess, serviceLabel) {
+  return new Promise(function resolveChildStart(resolve, reject) {
+    function handleExit(exitCode, signalName) {
+      const reason = signalName ? `signal ${signalName}` : `exit code ${exitCode}`;
+      reject(
+        new Error(
+          `${serviceLabel} failed to start (${reason}). ` +
+            "Another process may still be using the port. Try: anythinggraph stop"
+        )
+      );
+    }
+
+    childProcess.once("exit", handleExit);
+    setTimeout(function clearExitWatch() {
+      childProcess.removeListener("exit", handleExit);
+      resolve();
+    }, 750);
+  });
+}
+
 // Write supervisor PID and child process metadata to disk.
 function writeSupervisorState(homeDirectory, childRecords) {
   const pidFilePath = getSupervisorPidFilePath(homeDirectory);
@@ -196,15 +217,15 @@ export async function startSupervisor(config, options) {
   const childProcesses = [];
 
   console.log("Starting reasoning-service...");
-  childProcesses.push(
-    startRustService(
-      config,
-      "reasoning-service",
-      rustBinaries.reasoning,
-      childRecords,
-      logDirectory
-    )
+  const reasoningProcess = startRustService(
+    config,
+    "reasoning-service",
+    rustBinaries.reasoning,
+    childRecords,
+    logDirectory
   );
+  childProcesses.push(reasoningProcess);
+  await waitForChildProcessStart(reasoningProcess, "reasoning-service");
 
   await waitForPort(ports.reasoning, 180000);
 

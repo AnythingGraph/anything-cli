@@ -123,6 +123,17 @@ export function buildRustBinariesFromSource(workspaceRoot) {
   runCommand("cargo build --release -p reasoning-service", { cwd: workspaceRoot });
 }
 
+// Pull latest anything-cli source before a forced rebuild.
+function pullSourceCheckoutBeforeRebuild(sourceRoot) {
+  const gitDirectory = path.join(sourceRoot, ".git");
+  if (!fs.existsSync(gitDirectory)) {
+    return;
+  }
+
+  console.log(`Updating git checkout: ${sourceRoot}`);
+  runCommand(`git -C "${sourceRoot}" pull --ff-only`);
+}
+
 // Ensure reasoning-service exists in ~/.anythinggraph/bin — reuse or build from source.
 export async function ensureRustBinaries(config, options) {
   const homeDirectory = config.home;
@@ -133,6 +144,7 @@ export async function ensureRustBinaries(config, options) {
 
   if (rebuildRequested) {
     removeInstalledRustBinaries(homeDirectory);
+    pullSourceCheckoutBeforeRebuild(sourcePaths.sourceRoot);
   } else {
     const existingPaths = getInstalledRustBinaryPaths(homeDirectory);
     if (existingPaths) {

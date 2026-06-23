@@ -36,5 +36,8 @@ export async function runStartCommand(args) {
   }
 
   config.home = homeDirectory;
-  await startSupervisor(config, { foreground: options.foreground });
+  await startSupervisor(config, {
+    foreground: options.foreground,
+    rebuildRust: options.rebuildRust,
+  });
 }
