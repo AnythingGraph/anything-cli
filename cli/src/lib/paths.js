@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readEnvFileMap } from "./envFile.js";
 
 export const DEFAULT_PORTS = {
   reasoning: 8787,
@@ -134,9 +135,12 @@ export function loadDotEnvFile(envFilePath) {
 export function buildServiceEnvironment(config) {
   const ports = config.ports || DEFAULT_PORTS;
   const sourceRoot = config.sourceRoot;
+  const sourcePaths = buildSourcePaths(sourceRoot);
+  const dotEnvValues = Object.fromEntries(readEnvFileMap(sourcePaths.envPath));
 
   return {
     ...process.env,
+    ...dotEnvValues,
     AG_WORKSPACE_ROOT: sourceRoot,
     AG_REASONING_HOST: "127.0.0.1",
     AG_REASONING_PORT: String(ports.reasoning),

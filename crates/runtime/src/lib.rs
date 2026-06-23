@@ -91,6 +91,8 @@ impl ReasoningRuntime {
 
     // Reload playbooks, bindings, and profile from configured directories.
     pub async fn reload_catalog(&self) -> Result<()> {
+        load_workspace_dotenv();
+
         let mut playbooks = HashMap::new();
         for playbook_path in discover_playbooks_in_directory(&self.config.playbooks_dir)? {
             let playbook = load_playbook_from_path(&playbook_path)?;
@@ -217,7 +219,9 @@ impl ReasoningRuntime {
         binding: &PlaybookBinding,
         rebac_state: Option<&rebac_enforce::RebacState>,
     ) -> Result<ProofEnvelope> {
-        let profile = self.profile.read().await.clone();
+        load_workspace_dotenv();
+        let mut profile = self.profile.read().await.clone();
+        resolve_profile_env_refs(&mut profile);
         let context = build_exec_context(binding, &profile)
             .map_err(|error| anyhow!("build exec context failed: {error}"))?;
 
@@ -420,20 +424,38 @@ impl ReasoningRuntime {
         })
     }
 
+    // Load one profile source from disk and resolve env: references.
+    async fn resolve_source_connection(&self, source_id: &str) -> Result<SourceConnection> {
+        load_workspace_dotenv();
+
+        let connection = if let Some(profile_path) = self.config.profile_path.as_ref() {
+            let profile = load_profile_from_path(profile_path)?;
+            profile
+                .sources
+                .get(source_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?
+        } else {
+            let profile = self.profile.read().await;
+            profile
+                .sources
+                .get(source_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?
+        };
+
+        let mut resolved_connection = connection;
+        resolve_connection_env_refs(&mut resolved_connection);
+        Ok(resolved_connection)
+    }
+
     // Introspect a configured source for agent-driven binding generation.
     pub async fn introspect_source(
         &self,
         source_id: &str,
         schema_name: Option<&str>,
     ) -> Result<IntrospectSourceResponse> {
-        let profile = self.profile.read().await;
-        let connection = profile
-            .sources
-            .get(source_id)
-            .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?
-            .clone();
-        drop(profile);
-
+        let connection = self.resolve_source_connection(source_id).await?;
         self.introspect_connection(source_id, &connection, schema_name)
             .await
     }
@@ -557,18 +579,14 @@ impl ReasoningRuntime {
         schema_name: Option<&str>,
         limit: Option<u32>,
     ) -> Result<SampleSourceResponse> {
-        let profile = self.profile.read().await;
-        let connection = profile
-            .sources
-            .get(source_id)
-            .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?;
+        let connection = self.resolve_source_connection(source_id).await?;
 
         let capped_limit = cap_sample_limit(limit.unwrap_or(DEFAULT_SOURCE_SAMPLE_LIMIT));
 
         let (source_query, rows) = match connection.adapter.as_str() {
             "sql" => {
                 let table_name = require_sample_resource(resource, "table")?;
-                let dsn = require_dsn(connection, source_id)?;
+                let dsn = require_dsn(&connection, source_id)?;
                 sample_sql_table(
                     SqlDialect::Postgres,
                     dsn,
@@ -581,14 +599,14 @@ impl ReasoningRuntime {
             }
             "mysql" => {
                 let table_name = require_sample_resource(resource, "table")?;
-                let dsn = require_dsn(connection, source_id)?;
+                let dsn = require_dsn(&connection, source_id)?;
                 sample_sql_table(SqlDialect::Mysql, dsn, schema_name, table_name, capped_limit)
                     .await
                     .map_err(|error| anyhow!("mysql sample failed: {error}"))?
             }
             "mssql" => {
                 let table_name = require_sample_resource(resource, "table")?;
-                let dsn = require_dsn(connection, source_id)?;
+                let dsn = require_dsn(&connection, source_id)?;
                 sample_sql_table(SqlDialect::Mssql, dsn, schema_name, table_name, capped_limit)
                     .await
                     .map_err(|error| anyhow!("mssql sample failed: {error}"))?
@@ -620,7 +638,7 @@ impl ReasoningRuntime {
             }
             "mongodb" => {
                 let collection_name = require_sample_resource(resource, "collection")?;
-                let dsn = require_dsn(connection, source_id)?;
+                let dsn = require_dsn(&connection, source_id)?;
                 sample_mongodb_collection(
                     dsn,
                     connection.database.as_deref().or(schema_name),
@@ -1110,24 +1128,67 @@ fn require_dsn<'a>(connection: &'a SourceConnection, source_id: &str) -> Result<
 // Replace env:VAR references in profile connection fields.
 fn resolve_profile_env_refs(profile: &mut SourceProfile) {
     for source in profile.sources.values_mut() {
-        if let Some(dsn) = source.dsn.as_ref() {
-            source.dsn = Some(resolve_env_reference(dsn));
+        resolve_connection_env_refs(source);
+    }
+}
+
+// Resolve env:VAR references on one source connection.
+fn resolve_connection_env_refs(connection: &mut SourceConnection) {
+    if let Some(dsn) = connection.dsn.as_ref() {
+        connection.dsn = Some(resolve_env_reference(dsn));
+    }
+    if let Some(instance_url) = connection.instance_url.as_ref() {
+        connection.instance_url = Some(resolve_env_reference(instance_url));
+    }
+    if let Some(auth) = connection.auth.as_ref() {
+        connection.auth = Some(resolve_env_reference(auth));
+    }
+    if let Some(file_path) = connection.file_path.as_ref() {
+        connection.file_path = Some(resolve_env_reference(file_path));
+    }
+    if let Some(base_url) = connection.base_url.as_ref() {
+        connection.base_url = Some(resolve_env_reference(base_url));
+    }
+    if let Some(database) = connection.database.as_ref() {
+        connection.database = Some(resolve_env_reference(database));
+    }
+}
+
+// Load .env from the ag-cli workspace into the process environment.
+fn load_workspace_dotenv() {
+    let env_path = resolve_workspace_root().join(".env");
+    if !env_path.is_file() {
+        return;
+    }
+
+    let raw_text = match std::fs::read_to_string(&env_path) {
+        Ok(raw_text) => raw_text,
+        Err(_) => return,
+    };
+
+    for line in raw_text.lines() {
+        let trimmed_line = line.trim();
+        if trimmed_line.is_empty() || trimmed_line.starts_with('#') {
+            continue;
         }
-        if let Some(instance_url) = source.instance_url.as_ref() {
-            source.instance_url = Some(resolve_env_reference(instance_url));
+
+        let Some((key, value)) = trimmed_line.split_once('=') else {
+            continue;
+        };
+
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
         }
-        if let Some(auth) = source.auth.as_ref() {
-            source.auth = Some(resolve_env_reference(auth));
+
+        let mut resolved_value = value.trim().to_string();
+        if (resolved_value.starts_with('"') && resolved_value.ends_with('"'))
+            || (resolved_value.starts_with('\'') && resolved_value.ends_with('\''))
+        {
+            resolved_value = resolved_value[1..resolved_value.len() - 1].to_string();
         }
-        if let Some(file_path) = source.file_path.as_ref() {
-            source.file_path = Some(resolve_env_reference(file_path));
-        }
-        if let Some(base_url) = source.base_url.as_ref() {
-            source.base_url = Some(resolve_env_reference(base_url));
-        }
-        if let Some(database) = source.database.as_ref() {
-            source.database = Some(resolve_env_reference(database));
-        }
+
+        std::env::set_var(key, resolved_value);
     }
 }
 
