@@ -3,15 +3,15 @@
 **Anything Graph** is a semantic data layer for your AI agents. It addresses the most frustrating questions in agentic AI today:
 
 ```
-🎯 How do I avoid hallucination?
-💸 How do I let my agent read millions of records without burning lots of tokens?
-📖 How do I stop the agent from using the wrong definition of a term?
-🔗 How do I make the agent understand data across many systems?
 🤝 How do I make agent answers consistent across teams?
 🏢 How do I make agents work across different departments?
 🔍 How do I improve retrieval quality in RAG?
 🔒 How do I enforce permissions and access control?
 📋 How do I improve auditability?
+🎯 How do I avoid hallucination?
+💸 How do I let my agent read millions of records without burning lots of tokens?
+📖 How do I stop the agent from using the wrong definition of a term?
+🔗 How do I make the agent understand data across many systems?
 ```
 
 **We believe the answer is not another LLM or another AI orchestration system — it is your data.** You need a lightweight semantic layer between your AI agents and your systems of record. It never moves your data, is not another ETL project, and does not rely on dumping prompts.
