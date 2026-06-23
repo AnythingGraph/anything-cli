@@ -1,0 +1,31 @@
+{
+  "name": "@anythinggraph/cli",
+  "version": "0.2.2",
+  "description": "AnythingGraph CLI — onboard, start, and daemon-install the ag-cli reasoning layer",
+  "type": "module",
+  "bin": {
+    "anythinggraph": "./bin/anythinggraph.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "anythinggraph",
+    "anything-cli",
+    "ag-cli",
+    "mcp",
+    "ontology",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnythingGraph/anything-cli.git",
+    "directory": "cli"
+  }
+}

@@ -10,6 +10,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use plan_ir::{Plan, QueryRequest};
 use proof::ProofEnvelope;
+use binding_spec::SourceConnection;
 use runtime::{
     default_paths_from_workspace, resolve_workspace_root, ReasoningRuntime, TestBindingRequest,
 };
@@ -94,6 +95,30 @@ struct SuggestBindingsRequest {
     schema_name: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ValidateSourceRequest {
+    adapter: String,
+    #[serde(default)]
+    dsn: Option<String>,
+    #[serde(default)]
+    instance_url: Option<String>,
+    #[serde(default)]
+    auth: Option<String>,
+    #[serde(default)]
+    file_path: Option<String>,
+    #[serde(default)]
+    base_url: Option<String>,
+    #[serde(default)]
+    database: Option<String>,
+    #[serde(default)]
+    schema_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ReloadCatalogResponse {
+    ok: bool,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -138,7 +163,9 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/health", get(health_handler))
+        .route("/catalog/reload", post(reload_catalog_handler))
         .route("/sources", get(list_sources_handler))
+        .route("/sources/validate", post(validate_source_handler))
         .route("/sources/{source_id}/adapter-guide", get(get_adapter_guide_handler))
         .route("/sources/{source_id}/introspect", post(introspect_source_handler))
         .route("/sources/{source_id}/sample", post(sample_source_handler))
@@ -242,6 +269,39 @@ async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
 
 async fn list_playbooks_handler(State(state): State<AppState>) -> Json<Vec<String>> {
     Json(state.runtime.list_playbook_ids().await)
+}
+
+async fn reload_catalog_handler(
+    State(state): State<AppState>,
+) -> Result<Json<ReloadCatalogResponse>, (StatusCode, String)> {
+    state
+        .runtime
+        .reload_catalog()
+        .await
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(Json(ReloadCatalogResponse { ok: true }))
+}
+
+async fn validate_source_handler(
+    State(state): State<AppState>,
+    Json(request): Json<ValidateSourceRequest>,
+) -> Result<Json<runtime::IntrospectSourceResponse>, (StatusCode, String)> {
+    let connection = SourceConnection {
+        adapter: request.adapter,
+        dsn: request.dsn,
+        instance_url: request.instance_url,
+        auth: request.auth,
+        file_path: request.file_path,
+        base_url: request.base_url,
+        database: request.database,
+    };
+
+    state
+        .runtime
+        .validate_source_connection(&connection, request.schema_name.as_deref())
+        .await
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
 }
 
 async fn playbook_context_handler(

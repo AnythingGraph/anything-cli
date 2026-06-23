@@ -44,14 +44,22 @@ anythinggraph start
 ### 2. Set up your data connections
 
 ```bash
-# Create .env and add your database credentials.
-cp .env.example .env
-
-chmod +x start-all.sh   # first time only
-./start-all.sh          # loads .env automatically and starts services
+anythinggraph start
+anythinggraph source add
 ```
 
-We support SQL databases, MongoDB, Salesforce SOQL, CSV, and REST/HTTP JSON APIs as data sources. See the [full documentation](https://www.anythinggraph.com/documentation.html).
+`source add` is a four-step wizard: pick adapter (Postgres, MySQL, SQL Server, MongoDB, Salesforce, CSV, REST), choose a profile name (`source_id`), enter credentials, then validate before saving `profiles/local.yaml` and `.env`.
+
+Git-clone contributors can use the same flow after `npm install -g @anythinggraph/cli`, or edit files manually:
+
+```bash
+cp .env.example .env
+# edit profiles/local.yaml and .env, then:
+chmod +x start-all.sh   # first time only
+./start-all.sh
+```
+
+We support SQL databases, MongoDB, Salesforce SOQL, CSV, and REST/HTTP JSON APIs as data sources. See [connect your data](https://anythinggraph.com/connect-data.html) and the [full documentation](https://www.anythinggraph.com/documentation.html).
 
 ### 3. Wire up MCP in your favorite AI agent
 

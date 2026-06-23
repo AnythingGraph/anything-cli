@@ -6,6 +6,75 @@ Sample playbooks for AnythingGraph CLI. Setup and MCP usage: **[main README](../
 
 **These are demo playbooks only** — names like `crm_user`, `owns_account`, and `crm-payroll-access` illustrate the format. Author your own playbooks for your domain.
 
+---
+
+## What it does
+
+### The problem
+
+Your data already lives across Postgres, Salesforce, CSV files, and more. Your AI agent does not.
+
+Without a playbook, every agent session starts from scratch:
+
+- You paste schema dumps into the prompt
+- The agent guesses what "customer" or "account" means
+- It writes ad-hoc SQL that breaks when a column is renamed
+- It cannot follow relationships across systems (CRM in Postgres, payroll in CSV)
+- It has no idea who is allowed to see which rows
+
+**Result:** hallucinated answers, huge token bills, inconsistent results across teams, and no audit trail.
+
+### Before vs after
+
+**Before (no playbook)**
+
+```
+User: "How many accounts does Alex Anderson own?"
+
+Agent:
+  1. Dump 50 tables into context        → 8,000 tokens
+  2. Guess: users? accounts? owners?    → wrong join
+  3. Return: "Alex owns 12 accounts"    → no proof, possibly wrong
+```
+
+**After (with playbook `crm-payroll-access`)**
+
+```
+User: "How many accounts does Alex Anderson own?"
+
+Agent:
+  1. Load playbook vocabulary           → crm_user, crm_account, owns_account
+  2. Resolve Alex → user_id via binding → 1 governed query
+  3. Count owns_account relationships   → 3 accounts
+  4. Return structured proof            → playbook, plan, source rows
+```
+
+Same question. Fraction of the tokens. Answer tied to real data.
+
+### What a playbook gives you
+
+| Without a playbook | With a playbook |
+|--------------------|-----------------|
+| Schema stuffed into every prompt | Stable business vocabulary (`crm_user`, `owns_account`) |
+| Agent invents SQL from chat | Governed path: playbook → plan → live source |
+| One database at a time | Federated: Postgres + CSV + Salesforce in one graph |
+| "Trust me" answers | Auditable proof — which rows, which relationship |
+| Access control in prompt instructions | ReBAC rules in the playbook itself |
+
+### ROI in plain terms
+
+| Metric | Typical impact |
+|--------|----------------|
+| **Tokens per query** | 90% less context — agents query structured facts, not full schemas |
+| **Hallucination risk** | Lower — answers grounded in live rows and declared relationships |
+| **Cross-system questions** | Possible — e.g. "show payroll for users who own enterprise accounts" across Postgres + CSV |
+| **Maintenance** | IT renames `owner_user_id` → update one binding YAML, not every prompt |
+| **Team consistency** | Everyone uses the same playbook — same definitions, same access rules |
+
+**One sentence:** A playbook is your organization's **business dictionary + relationship map + access rules** — shipped as a JSON file, queried against live data without copying it.
+
+---
+
 | Playbook | Sources |
 |----------|---------|
 | `crm-example` | Postgres |

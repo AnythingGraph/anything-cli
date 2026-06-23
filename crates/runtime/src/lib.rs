@@ -430,8 +430,31 @@ impl ReasoningRuntime {
         let connection = profile
             .sources
             .get(source_id)
-            .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?;
+            .ok_or_else(|| anyhow!("profile missing source id: {source_id}"))?
+            .clone();
+        drop(profile);
 
+        self.introspect_connection(source_id, &connection, schema_name)
+            .await
+    }
+
+    // Test a connection config before it is saved to profiles/local.yaml.
+    pub async fn validate_source_connection(
+        &self,
+        connection: &binding_spec::SourceConnection,
+        schema_name: Option<&str>,
+    ) -> Result<IntrospectSourceResponse> {
+        self.introspect_connection("_validate", connection, schema_name)
+            .await
+    }
+
+    // Run adapter-specific schema introspection for one source connection.
+    pub async fn introspect_connection(
+        &self,
+        source_id: &str,
+        connection: &binding_spec::SourceConnection,
+        schema_name: Option<&str>,
+    ) -> Result<IntrospectSourceResponse> {
         let schema = match connection.adapter.as_str() {
             "sql" => {
                 let dsn = connection
