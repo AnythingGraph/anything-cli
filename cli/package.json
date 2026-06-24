@@ -1,6 +1,6 @@
 {
   "name": "@anythinggraph/cli",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "AnythingGraph CLI — onboard, start, and daemon-install the ag-cli reasoning layer",
   "type": "module",
   "bin": {
