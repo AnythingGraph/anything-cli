@@ -59,7 +59,7 @@ chmod +x start-all.sh   # first time only
 ./start-all.sh
 ```
 
-We support SQL databases, MongoDB, Salesforce SOQL, CSV, and REST/HTTP JSON APIs as data sources. See [connect your data](https://anythinggraph.com/connect-data.html) and the [full documentation](https://www.anythinggraph.com/documentation.html).
+We support SQL databases, MongoDB, Salesforce SOQL, CSV, and REST/HTTP JSON APIs as data sources. See [connect your data](https://anythinggraph.github.io/getting-started/connect-your-data/) and the [full documentation](https://anythinggraph.github.io/).
 
 ### 3. Wire up MCP in your favorite AI agent
 
@@ -79,9 +79,9 @@ Use [AGENTS.md](https://github.com/AnythingGraph/anything-cli/blob/main/AGENTS.m
 
 This step has the most impact. Use your AI agent to browse data, define entities and relationships, and set role-based access control — all in natural language.
 
-See the playbook guide: [anythingcli-playbooks-guide.html](https://www.anythinggraph.com/anythingcli-playbooks-guide.html).
+See the playbook guide: [Playbooks documentation](https://anythinggraph.github.io/playbooks/).
 
-The Anything Graph engine does most of the heavy lifting to produce your [ontology playbook and data bindings](https://www.anythinggraph.com/anythingcli-playbooks-guide.html).
+The Anything Graph engine does most of the heavy lifting to produce your [ontology playbook and data bindings](https://anythinggraph.github.io/playbooks/).
 
 ### 5. Launch your ontology playbooks to production
 
@@ -100,7 +100,7 @@ Production playbooks provide scoped data access, AI reasoning, and governance. E
 
 Adapters connect profiles to live systems. **Seven ship today**; more share the same playbook and binding model.
 
-[See how to connect your data sources](https://anythinggraph.com/connect-data.html)
+[See how to connect your data sources](https://anythinggraph.github.io/getting-started/connect-your-data/)
 
 | Adapter        | Profile key     | Typical source                  | Status        |
 | -------------- | --------------- | ------------------------------- | ------------- |
@@ -124,7 +124,7 @@ Adapters connect profiles to live systems. **Seven ship today**; more share the 
 
 ## Playbooks and bindings
 
-How to author playbook JSON and binding YAML: **[playbooks/README.md](playbooks/README.md)** — or the web walkthrough at [anythingcli-playbooks-guide.html](https://www.anythinggraph.com/anythingcli-playbooks-guide.html) (uses demo playbooks as examples).
+How to author playbook JSON and binding YAML: **[playbooks/README.md](playbooks/README.md)** — or the web walkthrough at [Playbooks documentation](https://anythinggraph.github.io/playbooks/) (uses demo playbooks as examples).
 
 ---
 

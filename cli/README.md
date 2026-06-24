@@ -57,7 +57,7 @@ anythinggraph source add
 
 The wizard walks through four steps: choose adapter type, pick a `source_id`, enter connection details, then test the connection before writing `profiles/local.yaml` and `.env`.
 
-You can still edit those files by hand — see [connect-data.html](https://www.anythinggraph.com/connect-data.html) on the website.
+You can still edit those files by hand — see [Connect your data](https://anythinggraph.github.io/getting-started/connect-your-data/) in the documentation.
 
 `anythinggraph start` loads `.env` from the git checkout automatically.
 

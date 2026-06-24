@@ -2,7 +2,7 @@
 
 Sample playbooks for AnythingGraph CLI. Setup and MCP usage: **[main README](../README.md)**.
 
-**Step-by-step authoring guide (web):** open `website/anythingcli-playbooks-guide.html` in the OSS repo — or follow the sections below.
+**Step-by-step authoring guide (web):** [Playbooks documentation](https://anythinggraph.github.io/playbooks/) — or follow the sections below.
 
 **These are demo playbooks only** — names like `crm_user`, `owns_account`, and `crm-payroll-access` illustrate the format. Author your own playbooks for your domain.
 
