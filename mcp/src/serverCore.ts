@@ -138,7 +138,7 @@ export function createThinMcpServer(options: ThinMcpServerOptions): McpServer {
 
   const server = new McpServer(
     {
-      name: 'anythinggraph-thin',
+      name: 'anythinggraph-cli',
       version: '0.3.1',
     },
     {

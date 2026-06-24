@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Start reasoning-service (Rust) and thin MCP (HTTP) together.
+# Start reasoning-service (Rust) and anythinggraph-cli MCP (HTTP) together.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 

@@ -66,7 +66,7 @@ We support SQL databases, MongoDB, Salesforce SOQL, CSV, and REST/HTTP JSON APIs
 ```json
 {
   "mcpServers": {
-    "anythinggraph-thin": {
+    "anythinggraph-cli": {
       "url": "http://127.0.0.1:3334/mcp"
     }
   }

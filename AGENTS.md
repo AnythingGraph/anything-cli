@@ -1,10 +1,10 @@
 # AGENTS.md — Anything CLI MCP authoring guide
 
-Instructions for AI agents using **anythinggraph-thin** MCP to create playbooks and bindings.
+Instructions for AI agents using **anythinggraph-cli** MCP to create playbooks and bindings.
 
 ## Golden rules
 
-1. **Use MCP tools only** — when connected to **anythinggraph-thin** MCP, call tools (`introspect_source`, `query_graph`, etc.). Do **not** use `curl`, `fetch`, or Python scripts against `http://127.0.0.1:8787` unless the user explicitly asks for a standalone script or MCP is unavailable.
+1. **Use MCP tools only** — when connected to **anythinggraph-cli** MCP, call tools (`introspect_source`, `query_graph`, etc.). Do **not** use `curl`, `fetch`, or Python scripts against `http://127.0.0.1:8787` unless the user explicitly asks for a standalone script or MCP is unavailable.
 2. **Use compact declarative format only** — never author legacy verbose bindings with raw SQL.
 3. **`propose_*` validates; `save_*` persists** — save the **same YAML/JSON you wrote**, not expanded output from propose responses.
 4. **Never save `debug_compiled_binding_yaml`** — it is omitted by default; when present it is debug-only.

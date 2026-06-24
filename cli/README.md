@@ -26,6 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/AnythingGraph/anything-cli/main/cli
 | `anythinggraph status` | Show health URLs |
 | `anythinggraph doctor` | Prerequisites + service health checks |
 | `anythinggraph source add` | Interactive wizard: pick adapter, name source, enter credentials, validate, save |
+| `anythinggraph source remove` | List sources with status, pick by number, remove from profile and `.env` |
 | `anythinggraph sources` | List configured sources from `profiles/local.yaml` and validate each connection |
 | `anythinggraph mcp print-config` | Cursor MCP JSON |
 | `anythinggraph mcp print-config --target claude` | Claude Desktop `mcp-remote` bridge JSON |

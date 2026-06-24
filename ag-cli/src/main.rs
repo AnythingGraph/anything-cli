@@ -152,7 +152,7 @@ async fn main() -> Result<()> {
         } => {
             let snippet = serde_json::json!({
                 "mcpServers": {
-                    "anythinggraph-thin": {
+                    "anythinggraph-cli": {
                         "url": mcp_url,
                         "env": {
                             "AG_REASONING_URL": reasoning_url

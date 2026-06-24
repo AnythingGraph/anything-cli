@@ -7,7 +7,7 @@ export function buildMcpConfigJson(config) {
     return JSON.stringify(
       {
         mcpServers: {
-          anythinggraph: {
+          anythinggraph-cli: {
             url: mcpUrl,
             headers: {
               Authorization: `Bearer ${config.mcpAuthToken}`,
@@ -23,7 +23,7 @@ export function buildMcpConfigJson(config) {
   return JSON.stringify(
     {
       mcpServers: {
-        anythinggraph: {
+        anythinggraph-cli: {
           url: mcpUrl,
         },
       },
@@ -44,7 +44,7 @@ export function buildClaudeBridgeConfigJson(config) {
   return JSON.stringify(
     {
       mcpServers: {
-        anythinggraph: {
+        anythinggraph-cli: {
           command: "npx",
           args,
         },

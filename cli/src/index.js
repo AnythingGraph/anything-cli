@@ -4,6 +4,7 @@ import { runStopCommand } from "./commands/stop.js";
 import { runStatusCommand, runDoctorCommand } from "./commands/status.js";
 import { runMcpCommand } from "./commands/mcp.js";
 import { runSourceAddCommand } from "./commands/sourceAdd.js";
+import { runSourceRemoveCommand } from "./commands/sourceRemove.js";
 import { runSourcesCommand } from "./commands/sources.js";
 import { CLI_VERSION } from "./lib/version.js";
 
@@ -18,6 +19,7 @@ function printHelp() {
   console.log("  anythinggraph status [--home PATH]");
   console.log("  anythinggraph doctor [--home PATH]");
   console.log("  anythinggraph source add [--home PATH]");
+  console.log("  anythinggraph source remove [--home PATH]");
   console.log("  anythinggraph sources [--home PATH] [--json] [--no-validate]");
   console.log("  anythinggraph mcp print-config [--target cursor|claude] [--home PATH]");
   console.log("  anythinggraph gateway install");
@@ -101,7 +103,11 @@ export async function runCli(argv) {
       await runSourceAddCommand(commandArgs.slice(1));
       return;
     }
-    console.error("Usage: anythinggraph source add [--home PATH]");
+    if (commandArgs[0] === "remove") {
+      await runSourceRemoveCommand(commandArgs.slice(1));
+      return;
+    }
+    console.error("Usage: anythinggraph source add|remove [--home PATH]");
     process.exit(1);
   }
 

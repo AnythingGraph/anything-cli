@@ -2,16 +2,11 @@ import {
   loadConfig,
   resolveAnythingGraphHome,
   buildSourcePaths,
-  buildServiceUrls,
 } from "../lib/paths.js";
-import { checkHealthUrl } from "../lib/health.js";
-import {
-  buildReasoningAuthHeaders,
-  listConfiguredSources,
-  introspectConfiguredSource,
-  summarizeValidationResponse,
-} from "../lib/reasoningApi.js";
 import { getProfileFilePath } from "../lib/profileStore.js";
+import {
+  fetchValidatedSourceRows,
+} from "../lib/sourceRows.js";
 
 // Parse flags for the sources list command.
 function parseSourcesOptions(args) {
@@ -36,45 +31,6 @@ function parseSourcesOptions(args) {
   return options;
 }
 
-// Ensure reasoning-service is reachable before listing sources.
-async function ensureReasoningService(config) {
-  const urls = buildServiceUrls(config);
-  const reasoningHealthUrl = urls.reasoning;
-  const isHealthy = await checkHealthUrl(reasoningHealthUrl, 4000);
-  if (isHealthy) {
-    return reasoningHealthUrl.replace(/\/health$/, "");
-  }
-
-  console.error("");
-  console.error("Reasoning service is not running.");
-  console.error("Start the stack in another terminal: anythinggraph start");
-  process.exit(1);
-}
-
-// Validate one configured source and return a summary row.
-async function validateSourceEntry(reasoningBaseUrl, sourceEntry, authHeaders) {
-  try {
-    const introspection = await introspectConfiguredSource(
-      reasoningBaseUrl,
-      sourceEntry.source_id,
-      authHeaders
-    );
-    return {
-      source_id: sourceEntry.source_id,
-      adapter: sourceEntry.adapter,
-      validated: true,
-      summary: summarizeValidationResponse(introspection),
-    };
-  } catch (validationError) {
-    return {
-      source_id: sourceEntry.source_id,
-      adapter: sourceEntry.adapter,
-      validated: false,
-      summary: validationError.message,
-    };
-  }
-}
-
 // List configured sources, optionally validating each connection.
 export async function runSourcesCommand(args) {
   const options = parseSourcesOptions(args);
@@ -87,36 +43,16 @@ export async function runSourcesCommand(args) {
   }
 
   config.home = homeDirectory;
-  const sourcePaths = buildSourcePaths(config.sourceRoot);
   const profileFilePath = getProfileFilePath(config.sourceRoot);
-  const reasoningBaseUrl = await ensureReasoningService(config);
-  const authHeaders = buildReasoningAuthHeaders(sourcePaths.envPath);
+  const { rows } = await fetchValidatedSourceRows(config, {
+    skipValidate: options.skipValidate,
+  });
 
-  const configuredSources = await listConfiguredSources(reasoningBaseUrl, authHeaders);
-  const sourceList = Array.isArray(configuredSources) ? configuredSources : [];
-
-  if (sourceList.length === 0) {
+  if (rows.length === 0) {
     console.log("No sources configured.");
     console.log(`Profile: ${profileFilePath}`);
     console.log("Add one with: anythinggraph source add");
     return;
-  }
-
-  let rows = sourceList.map(function mapConfiguredSource(sourceEntry) {
-    return {
-      source_id: sourceEntry.source_id,
-      adapter: sourceEntry.adapter,
-      validated: null,
-      summary: null,
-    };
-  });
-
-  if (!options.skipValidate) {
-    rows = [];
-    for (const sourceEntry of sourceList) {
-      const row = await validateSourceEntry(reasoningBaseUrl, sourceEntry, authHeaders);
-      rows.push(row);
-    }
   }
 
   if (options.json) {
@@ -159,9 +95,8 @@ export async function runSourcesCommand(args) {
 
   for (const row of rows) {
     const statusMarker = row.validated ? "ok" : "failed";
-    const statusText = row.validated ? row.summary : row.summary;
     console.log(
-      `${row.source_id.padEnd(idColumnWidth)}  ${row.adapter.padEnd(adapterColumnWidth)}  ${statusMarker} — ${statusText}`
+      `${row.source_id.padEnd(idColumnWidth)}  ${row.adapter.padEnd(adapterColumnWidth)}  ${statusMarker} — ${row.summary}`
     );
   }
 

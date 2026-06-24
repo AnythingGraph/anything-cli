@@ -1,12 +1,12 @@
 {
-  "name": "@anythinggraph/thin-mcp",
+  "name": "@anythinggraph/cli-mcp",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Thin MCP layer for AnythingGraph reasoning-service (Rust core)",
+  "description": "MCP layer for AnythingGraph CLI reasoning-service (Rust core)",
   "bin": {
-    "anythinggraph-thin-mcp": "./dist/index.js",
-    "anythinggraph-thin-mcp-http": "./dist/http.js"
+    "anythinggraph-cli-mcp": "./dist/index.js",
+    "anythinggraph-cli-mcp-http": "./dist/http.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

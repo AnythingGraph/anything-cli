@@ -83,3 +83,70 @@ export function appendSourceToProfile(profileFilePath, sourceId, profileFields) 
   const trimmed = profileText.trimEnd();
   fs.writeFileSync(profileFilePath, `${trimmed}\n${block}\n`, "utf8");
 }
+
+// List env var keys referenced by one source block in profiles/local.yaml.
+export function listEnvKeysForSource(profileText, sourceId) {
+  const envKeys = [];
+  const lines = profileText.split("\n");
+  let insideSource = false;
+
+  for (const line of lines) {
+    if (new RegExp(`^  ${sourceId}:\\s*$`).test(line)) {
+      insideSource = true;
+      continue;
+    }
+
+    if (insideSource) {
+      if (/^  [a-z][a-z0-9_]*:\s*$/.test(line)) {
+        break;
+      }
+
+      const envMatch = line.match(/^\s+[A-Za-z0-9_]+:\s*env:([A-Z0-9_]+)\s*$/);
+      if (envMatch) {
+        envKeys.push(envMatch[1]);
+      }
+    }
+  }
+
+  return envKeys;
+}
+
+// Remove one source block from profiles/local.yaml.
+export function removeSourceFromProfile(profileFilePath, sourceId) {
+  if (!fs.existsSync(profileFilePath)) {
+    throw new Error(`Profile file not found: ${profileFilePath}`);
+  }
+
+  const profileText = fs.readFileSync(profileFilePath, "utf8");
+  if (!profileHasSourceId(profileText, sourceId)) {
+    throw new Error(`Profile does not contain source '${sourceId}'.`);
+  }
+
+  const lines = profileText.split("\n");
+  const keptLines = [];
+  let skippingSource = false;
+
+  for (const line of lines) {
+    if (new RegExp(`^  ${sourceId}:\\s*$`).test(line)) {
+      skippingSource = true;
+      continue;
+    }
+
+    if (skippingSource) {
+      if (/^  [a-z][a-z0-9_]*:\s*$/.test(line)) {
+        skippingSource = false;
+        keptLines.push(line);
+      }
+      continue;
+    }
+
+    keptLines.push(line);
+  }
+
+  let outputText = keptLines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  if (outputText) {
+    outputText = `${outputText}\n`;
+  }
+
+  fs.writeFileSync(profileFilePath, outputText, "utf8");
+}

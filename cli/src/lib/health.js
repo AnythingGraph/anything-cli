@@ -44,7 +44,14 @@ export async function checkHealthUrl(healthUrl, timeoutMilliseconds) {
 
   try {
     const response = await fetch(healthUrl, { signal: controller.signal });
-    return response.ok;
+    if (response.ok) {
+      return true;
+    }
+    // MCP Streamable HTTP returns 405 on GET /mcp when the server is up.
+    if (healthUrl.endsWith("/mcp") && response.status === 405) {
+      return true;
+    }
+    return false;
   } catch (_error) {
     return false;
   } finally {

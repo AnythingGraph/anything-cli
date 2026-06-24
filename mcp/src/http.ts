@@ -103,7 +103,7 @@ async function handleMcpPost(request: Request, response: Response): Promise<void
 
     await transport.handleRequest(request, response, request.body);
   } catch (error) {
-    console.error('[anythinggraph-thin-mcp-http] POST error:', error);
+    console.error('[anythinggraph-cli-mcp-http] POST error:', error);
     if (!response.headersSent) {
       response.status(500).json({
         jsonrpc: '2.0',
@@ -129,16 +129,16 @@ async function main() {
   const host = getHttpHost();
   const port = getHttpPort();
   app.listen(port, host, () => {
-    console.error(`[anythinggraph-thin-mcp-http] listening on http://${host}:${port}${mcpPath}`);
+    console.error(`[anythinggraph-cli-mcp-http] listening on http://${host}:${port}${mcpPath}`);
     if (isAuthRequired()) {
-      console.error('[anythinggraph-thin-mcp-http] auth enabled — clients must send Authorization: Bearer token');
+      console.error('[anythinggraph-cli-mcp-http] auth enabled — clients must send Authorization: Bearer token');
     } else {
-      console.error('[anythinggraph-thin-mcp-http] auth disabled — set AG_AUTH_DISABLED=0 and AG_ADMIN_TOKENS / AG_USER_TOKENS to enable');
+      console.error('[anythinggraph-cli-mcp-http] auth disabled — set AG_AUTH_DISABLED=0 and AG_ADMIN_TOKENS / AG_USER_TOKENS to enable');
     }
   });
 }
 
 main().catch((error) => {
-  console.error('[anythinggraph-thin-mcp-http] fatal:', error);
+  console.error('[anythinggraph-cli-mcp-http] fatal:', error);
   process.exit(1);
 });

@@ -76,3 +76,40 @@ export function setEnvFileValues(envFilePath, keyValuePairs) {
   const outputText = lines.join("\n");
   fs.writeFileSync(envFilePath, outputText.endsWith("\n") ? outputText : `${outputText}\n`, "utf8");
 }
+
+// Remove one or more keys from a .env file.
+export function removeEnvFileKeys(envFilePath, keysToRemove) {
+  const keys = new Set(keysToRemove);
+  if (keys.size === 0 || !envFilePath || !fs.existsSync(envFilePath)) {
+    return [];
+  }
+
+  const removedKeys = [];
+  const lines = fs.readFileSync(envFilePath, "utf8").split("\n");
+  const keptLines = [];
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith("#") || !trimmedLine.includes("=")) {
+      keptLines.push(line);
+      continue;
+    }
+
+    const key = trimmedLine.slice(0, trimmedLine.indexOf("=")).trim();
+    if (keys.has(key)) {
+      removedKeys.push(key);
+      continue;
+    }
+
+    keptLines.push(line);
+  }
+
+  const outputText = keptLines.join("\n");
+  fs.writeFileSync(
+    envFilePath,
+    outputText.endsWith("\n") || outputText.length === 0 ? outputText : `${outputText}\n`,
+    "utf8"
+  );
+
+  return removedKeys;
+}
