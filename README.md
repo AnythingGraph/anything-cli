@@ -22,7 +22,9 @@
 2. **Federated cross-system queries**
 3. **Auditable proof**
 4. **ReBAC in the playbook, not in the prompt**
-5. **Ontology ready without ETL team**
+5. **Git-native ontology — versioned playbooks and bindings in repo; federated access to live data without standing up an ETL team or lakehouse first**
+
+
 
 Your data stays where it is — Postgres, Salesforce, CSV files, and more. AnythingGraph gives Cursor, Claude, and other agents a **governed way to understand and query** that data, with answers you can trace back to the source.
 
