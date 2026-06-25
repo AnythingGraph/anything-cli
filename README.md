@@ -16,7 +16,13 @@
 
 **We believe the answer is not another LLM or another AI orchestration system — it is your data.** You need a lightweight semantic layer between your AI agents and your systems of record. It never moves your data, is not another ETL project, and does not rely on dumping prompts.
 
-Anything CLI
+## It gives you:
+
+1. **90% fewer tokens vs schema-in-prompt**
+2. **Federated cross-system queries**
+3. **Auditable proof**
+4. **ReBAC in the playbook, not in the prompt**
+5. **Ontology ready without ETL team**
 
 Your data stays where it is — Postgres, Salesforce, CSV files, and more. AnythingGraph gives Cursor, Claude, and other agents a **governed way to understand and query** that data, with answers you can trace back to the source.
 
