@@ -24,7 +24,7 @@
 4. **ReBAC in the playbook, not in the prompt**
 5. **Git-native ontology — versioned playbooks and bindings in repo; federated access to live data without standing up an ETL team or lakehouse first**
 
-**Watch our demo [here](https://anythinggraph.com/demo.html){target="_blank"}
+<b>watch our demo <a href="https://anythinggraph.com/demo.html" target="_blank">here</a></b>
 
 Your data stays where it is — Postgres, Salesforce, CSV files, and more. AnythingGraph gives Cursor, Claude, and other agents a **governed way to understand and query** that data, with answers you can trace back to the source.
 
