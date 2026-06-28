@@ -1,6 +1,6 @@
-# Anything Graph - Policy As Code Layer
+# Anything Graph - Ontology As Code Layer
 
-**Anything Graph** is a semantic data layer for your AI agents. It addresses the most frustrating questions in agentic AI today:
+**Anything Graph** Connect your existing systems, define governance once, reuse everywhere. It addresses the most frustrating questions in agentic AI today:
 
 ```
 🤝 How do I make agent answers consistent across teams?
